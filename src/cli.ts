@@ -1,10 +1,19 @@
 #!/usr/bin/env node
-import { getCurrentProfile, listProfiles, removeProfile, saveCurrentAs, switchTo } from './accounts.js';
+import {
+  getCurrentProfile,
+  listProfiles,
+  loginProfile,
+  refreshAllProfiles,
+  removeProfile,
+  saveCurrentAs,
+  switchTo,
+} from './accounts.js';
+import type { AccountProfile } from './types.js';
 
-const VERSION = '0.1.0';
+const VERSION = '0.2.0';
 
 function usage(): void {
-  console.log(`Codex Shift ${VERSION}\n\nCross-platform account switching for OpenAI Codex CLI.\n\nCommands:\n  save <name>       Save the currently logged-in Codex account\n  use <name>        Switch the default account\n  list              List saved accounts\n  current           Show the current account\n  remove <name>     Remove a saved account\n  status            Show account plan and rate limits (coming next)\n  login <name>      Login and save a new account (coming next)\n  version           Show version\n`);
+  console.log(`Codex Shift ${VERSION}\n\nCross-platform account switching for OpenAI Codex CLI.\n\nCommands:\n  login <name>      Login and save a new Codex account\n  save <name>       Save the currently logged-in Codex account\n  use <name>        Switch the default account\n  list              List saved accounts using cached metadata\n  status            Refresh and show account plan and weekly rate limits\n  current           Show the current account\n  remove <name>     Remove a saved account\n  version           Show version\n`);
 }
 
 function requireName(args: string[]): string {
@@ -13,10 +22,57 @@ function requireName(args: string[]): string {
   return name;
 }
 
+function formatPlan(plan?: string): string {
+  if (!plan) return '-';
+  const aliases: Record<string, string> = {
+    free: 'Free',
+    plus: 'Plus',
+    pro: 'Pro',
+    team: 'Team',
+    business: 'Business',
+    enterprise: 'Enterprise',
+    self_serve_business_prolite: 'Business',
+    enterprise_cbp_automation: 'Enterprise',
+  };
+  return aliases[plan] ?? plan;
+}
+
+function formatReset(timestamp?: number): string {
+  if (!timestamp) return '-';
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(timestamp * 1000));
+}
+
+function printProfiles(profiles: AccountProfile[]): void {
+  if (profiles.length === 0) {
+    console.log('No saved accounts.');
+    return;
+  }
+
+  console.table(profiles.map((profile) => ({
+    current: profile.isCurrent ? '*' : '',
+    name: profile.name,
+    account: profile.meta?.email ?? '-',
+    plan: formatPlan(profile.meta?.plan),
+    weekLeft: profile.meta?.weekLeft === undefined ? '-' : `${profile.meta.weekLeft}%`,
+    reset: formatReset(profile.meta?.weekReset),
+  })));
+}
+
 async function main(): Promise<void> {
   const [command, ...args] = process.argv.slice(2);
 
   switch (command) {
+    case 'login': {
+      const name = requireName(args);
+      await loginProfile(name);
+      console.log(`✓ Logged in, saved '${name}', and set it as current.`);
+      break;
+    }
     case 'save': {
       const name = requireName(args);
       await saveCurrentAs(name);
@@ -31,15 +87,13 @@ async function main(): Promise<void> {
       break;
     }
     case 'list':
-    case 'ls': {
-      const profiles = await listProfiles();
-      if (profiles.length === 0) {
-        console.log('No saved accounts.');
-        break;
-      }
-      console.table(profiles.map((p) => ({ current: p.isCurrent ? '*' : '', name: p.name, account: p.meta?.email ?? '-', plan: p.meta?.plan ?? '-' })));
+    case 'ls':
+      printProfiles(await listProfiles());
       break;
-    }
+    case 'status':
+      console.log('Refreshing account status...');
+      printProfiles(await refreshAllProfiles());
+      break;
     case 'current':
       console.log((await getCurrentProfile()) ?? 'not set');
       break;
@@ -50,10 +104,6 @@ async function main(): Promise<void> {
       console.log(`✓ Removed '${name}'.`);
       break;
     }
-    case 'status':
-      throw new Error('status is scaffolded but not implemented yet.');
-    case 'login':
-      throw new Error('login is scaffolded but not implemented yet.');
     case 'version':
     case '--version':
     case '-v':
