@@ -6,31 +6,63 @@ Cross-platform account switching for OpenAI Codex CLI.
 
 > Codex Shift is an unofficial third-party utility and is not affiliated with or endorsed by OpenAI.
 
-## Goals
+## What it does
 
-- Save multiple Codex CLI login profiles locally.
-- Switch the default Codex account without changing normal Codex commands.
-- Keep the existing Codex configuration, MCP setup, sessions and history untouched.
-- Support macOS and Windows first, with Linux naturally covered by the Node.js implementation.
-- Show account plan and rate-limit information when supported by the installed Codex CLI.
+Codex Shift keeps your existing Codex home intact — configuration, MCP servers, sessions, history, and normal Codex commands stay unchanged — while letting you save multiple local login profiles and choose which one becomes the default `~/.codex/auth.json`.
 
-## Planned UX
+## Usage
 
 ```bash
-codex account login personal
-codex account login work
-codex account list
-codex account status
-codex account use work
-codex account current
+# Save the account Codex is already using
+codex-shift save personal
 
-# Native Codex usage remains unchanged
+# Login another account and save it
+codex-shift login work
+
+# Fast local list (cached account metadata)
+codex-shift list
+
+# Refresh plan + weekly quota for every saved account
+codex-shift status
+
+# Change the default account
+codex-shift use work
+
+# See the default profile
+codex-shift current
+
+# Remove a non-current profile
+codex-shift remove personal
+```
+
+After switching, use Codex normally:
+
+```bash
 codex
 codex resume
 codex exec "..."
 ```
 
-The internal executable is `codex-shift`; a transparent Codex integration layer will be added before the first release.
+## Why not claim `codex account` by default?
+
+Codex Shift intentionally uses the standalone `codex-shift` command as its stable public interface. A future OpenAI Codex release may add its own `codex account` command, and other local wrappers can also intercept the `codex` executable.
+
+For that reason, Codex Shift does **not** overwrite or replace the native `codex` command by default. An optional compatibility integration may be offered later only when it can verify that no native command is being shadowed.
+
+This keeps commands such as `codex resume` fully native and avoids collisions with current or future Codex functionality.
+
+## Account status
+
+`codex-shift status` uses Codex's structured `app-server` account APIs rather than scraping the interactive `/status` screen. Each saved profile is queried using a temporary `CODEX_HOME`, so checking another account does not replace the user's active `~/.codex/auth.json`.
+
+The status table can show:
+
+- ChatGPT account email
+- plan type (for example Plus or Pro)
+- weekly quota remaining
+- weekly reset time
+
+If live lookup fails, previously cached profile metadata remains available through `codex-shift list`.
 
 ## Development
 
@@ -46,27 +78,42 @@ npm run build
 node dist/cli.js --help
 ```
 
-## Current scaffold
+## Platform support
 
-Implemented foundation:
+The core CLI is written in TypeScript/Node.js and targets:
 
-- TypeScript + Node.js 20+
-- Cross-platform profile paths
-- Local profile save/switch/list/current/remove primitives
-- macOS, Windows and Linux CI matrix
-- npm package metadata
+- macOS
+- Windows
+- Linux
 
-Next implementation work:
-
-- `login <name>` with safe rollback
-- structured `codex app-server` account metadata and weekly rate-limit reads
-- transparent `codex account ...` integration
-- locking/concurrency protection
-- tests and first release packaging
+CI runs against Node.js 20 and 22 on all three operating systems.
 
 ## Security
 
 Credentials stay on the local machine. Codex Shift stores profile copies under `~/.codex-accounts/<profile>/auth.json` (or the equivalent user-home path on Windows) and never intentionally prints authentication tokens.
+
+Live status checks copy a profile credential into a temporary Codex home for the duration of the query and remove that directory afterwards.
+
+## Project status
+
+Current MVP foundation:
+
+- profile `save`
+- profile `login`
+- profile `use`
+- local `list`
+- live `status`
+- `current`
+- `remove`
+- structured Codex app-server account/rate-limit reads
+- macOS / Windows / Linux CI
+
+Still planned before the first stable release:
+
+- filesystem locking for simultaneous account mutations
+- automated tests
+- polished npm installation and release workflow
+- optional conflict-safe `codex account ...` compatibility layer
 
 ## License
 
