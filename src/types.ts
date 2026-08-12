@@ -11,3 +11,10 @@ export interface AccountProfile {
   isCurrent: boolean;
   meta?: AccountMeta;
 }
+
+export interface AccountStatus {
+  email?: string;
+  plan?: string;
+  weekLeft?: number;
+  weekReset?: number;
+}
