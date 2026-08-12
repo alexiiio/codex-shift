@@ -9,6 +9,7 @@ import {
   profileDir,
   profileMetaPath,
 } from './paths.js';
+import { loginWithCodex, queryAccountFromAuth } from './codex.js';
 import type { AccountMeta, AccountProfile } from './types.js';
 
 const NAME_RE = /^[a-zA-Z0-9._-]+$/;
@@ -39,6 +40,14 @@ export async function getCurrentProfile(): Promise<string | null> {
   return value || null;
 }
 
+async function syncCurrentAuth(): Promise<void> {
+  const current = await getCurrentProfile();
+  if (!current || !(await exists(currentAuthPath))) return;
+  await fs.mkdir(profileDir(current), { recursive: true });
+  await fs.copyFile(currentAuthPath, profileAuthPath(current));
+  if (process.platform !== 'win32') await fs.chmod(profileAuthPath(current), 0o600);
+}
+
 export async function saveCurrentAs(name: string): Promise<void> {
   validateName(name);
   await ensureStorage();
@@ -49,6 +58,15 @@ export async function saveCurrentAs(name: string): Promise<void> {
   await fs.copyFile(currentAuthPath, profileAuthPath(name));
   if (process.platform !== 'win32') await fs.chmod(profileAuthPath(name), 0o600);
   await fs.writeFile(currentProfilePath, `${name}\n`, 'utf8');
+  await refreshProfileMeta(name).catch(() => undefined);
+}
+
+export async function loginProfile(name: string): Promise<void> {
+  validateName(name);
+  await ensureStorage();
+  await syncCurrentAuth();
+  await loginWithCodex();
+  await saveCurrentAs(name);
 }
 
 export async function switchTo(name: string): Promise<void> {
@@ -57,12 +75,7 @@ export async function switchTo(name: string): Promise<void> {
   const source = profileAuthPath(name);
   if (!(await exists(source))) throw new Error(`Profile '${name}' does not exist.`);
 
-  const current = await getCurrentProfile();
-  if (current && (await exists(currentAuthPath))) {
-    await fs.mkdir(profileDir(current), { recursive: true });
-    await fs.copyFile(currentAuthPath, profileAuthPath(current));
-  }
-
+  await syncCurrentAuth();
   await fs.copyFile(source, currentAuthPath);
   if (process.platform !== 'win32') await fs.chmod(currentAuthPath, 0o600);
   await fs.writeFile(currentProfilePath, `${name}\n`, 'utf8');
@@ -78,6 +91,36 @@ export async function removeProfile(name: string): Promise<void> {
 export async function writeMeta(name: string, meta: AccountMeta): Promise<void> {
   await fs.mkdir(profileDir(name), { recursive: true });
   await fs.writeFile(profileMetaPath(name), JSON.stringify(meta, null, 2) + '\n', 'utf8');
+}
+
+export async function refreshProfileMeta(name: string): Promise<AccountMeta> {
+  validateName(name);
+  const auth = profileAuthPath(name);
+  if (!(await exists(auth))) throw new Error(`Profile '${name}' does not exist.`);
+
+  const status = await queryAccountFromAuth(auth);
+  const meta: AccountMeta = {
+    ...status,
+    updatedAt: new Date().toISOString(),
+  };
+  await writeMeta(name, meta);
+  return meta;
+}
+
+export async function refreshAllProfiles(): Promise<AccountProfile[]> {
+  const profiles = await listProfiles();
+  const refreshed: AccountProfile[] = [];
+
+  for (const profile of profiles) {
+    try {
+      const meta = await refreshProfileMeta(profile.name);
+      refreshed.push({ ...profile, meta });
+    } catch {
+      refreshed.push(profile);
+    }
+  }
+
+  return refreshed;
 }
 
 export async function listProfiles(): Promise<AccountProfile[]> {
