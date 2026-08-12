@@ -1,5 +1,9 @@
 # Codex Shift
 
+<p align="center">
+  <strong>English</strong> | <a href="README.zh-CN.md">简体中文</a>
+</p>
+
 Cross-platform account switching for OpenAI Codex CLI.
 
 **Switch accounts. Keep your workflow.**
