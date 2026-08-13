@@ -20,7 +20,7 @@ Cross-platform account switching and weekly usage-window initialization for Open
 Core features include:
 
 - **Switch accounts:** Store multiple Codex login profiles locally, review their account and weekly usage information, and choose which one becomes active.
-- **Start weekly usage windows:** Detect saved accounts whose weekly window has not begun and, only after confirmation, send one deliberately minimal Codex request to start it.
+- **Start weekly usage windows:** Start inactive rolling weekly periods earlier, so their next reset is scheduled earlier instead of waiting for a future coding task. Only confirmed accounts receive one deliberately minimal Codex request.
 
 Both workflows keep your existing Codex home intact — including configuration, MCP servers, sessions, and history. Account switching only replaces the active `~/.codex/auth.json`; weekly initialization runs in an isolated temporary environment.
 
@@ -47,9 +47,9 @@ After installation, verify that the command is available:
 codex-shift --help
 ```
 
-## Save your first profile
+## Quick start
 
-After Codex CLI is installed and logged in, install Codex Shift and save that account. `personal` is an example profile name—replace it with any name that makes sense to you.
+After Codex CLI is installed and logged in, save that account. `personal` is an example profile name—replace it with any name that makes sense to you.
 
 ```bash
 codex-shift save personal
@@ -78,7 +78,7 @@ Start weekly usage windows that have not begun yet:
 codex-shift init-week
 ```
 
-Codex Shift detects eligible accounts, shows the minimal model and reasoning plan, lets you choose accounts individually, and asks for final confirmation before sending one deliberately small request per selected account. Cancelling sends no requests and uses no quota.
+This starts each selected account's rolling weekly period now instead of waiting for its next real coding task, so the next reset is scheduled earlier. Codex Shift detects eligible accounts, shows the selected model and lowest supported reasoning effort, lets you choose accounts individually, and asks for final confirmation before sending one deliberately small request per selected account. Cancelling sends no requests and uses no quota.
 
 ## Commands
 
@@ -106,9 +106,9 @@ In an interactive terminal, `>` marks the selected profile and `*` marks the cur
 
 If every live refresh fails, cached or unavailable rows are still displayed, but `list` exits with status `1` so scripts can detect that no current data was retrieved.
 
-### Start unused weekly windows
+### Start weekly usage windows early
 
-Some accounts do not start their weekly usage window until their first Codex request. Run:
+Some accounts do not start their weekly usage window until their first Codex request. Starting the rolling period earlier also schedules its next reset earlier, rather than deferring both until a future coding task. This does not increase the quota allowance; it shifts when the current weekly period begins and resets. Run:
 
 ```bash
 codex-shift init-week
