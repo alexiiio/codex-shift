@@ -10,70 +10,92 @@ Cross-platform account switching for OpenAI Codex CLI.
 
 > Codex Shift is an unofficial third-party utility and is not affiliated with or endorsed by OpenAI.
 
-## What it does
+Codex Shift keeps your existing Codex home intact — including configuration, MCP servers, sessions, and history. It stores multiple login profiles locally and lets you choose which one becomes the active `~/.codex/auth.json`.
 
-Codex Shift keeps your existing Codex home intact — configuration, MCP servers, sessions, history, and normal Codex commands stay unchanged — while letting you save multiple local login profiles and choose which one becomes the default `~/.codex/auth.json`.
+## Installation
 
-## Usage
+### Requirements
+
+- Node.js 20 or later
+- [OpenAI Codex CLI](https://developers.openai.com/codex/cli) installed and available as `codex`
+
+### Install from source
+
+macOS and Linux:
 
 ```bash
-# Save the account Codex is already using
+git clone https://github.com/alexiiio/codex-shift.git
+cd codex-shift
+./scripts/install.sh
+```
+
+Windows PowerShell:
+
+```powershell
+git clone https://github.com/alexiiio/codex-shift.git
+cd codex-shift
+powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1
+```
+
+The installer downloads the project dependencies, checks and builds the source, and installs the `codex-shift` command globally with npm.
+
+To update a source installation, pull the latest changes and run the installer again.
+
+## Quick start
+
+`personal` and `work` below are example profile names, not fixed commands or reserved names. Replace them with names that make sense to you.
+
+Save the account Codex is currently using:
+
+```bash
 codex-shift save personal
-
-# Login another account and save it
-codex-shift login work
-
-# Fast local list (cached account metadata)
-codex-shift list
-
-# Refresh plan + weekly quota for every saved account
-codex-shift status
-
-# Change the default account
-codex-shift use work
-
-# See the default profile
-codex-shift current
-
-# Remove a non-current profile
-codex-shift remove personal
 ```
 
-After switching, use Codex normally:
+Log in to another account and save it as a profile:
 
 ```bash
-codex
-codex resume
-codex exec "..."
+codex-shift login work
 ```
 
-## Why not claim `codex account` by default?
+Switch profiles, then continue using Codex normally:
 
-Codex Shift intentionally uses the standalone `codex-shift` command as its stable public interface. A future OpenAI Codex release may add its own `codex account` command, and other local wrappers can also intercept the `codex` executable.
+```bash
+codex-shift use personal
+codex
+```
 
-For that reason, Codex Shift does **not** overwrite or replace the native `codex` command by default. An optional compatibility integration may be offered later only when it can verify that no native command is being shadowed.
+## Commands
 
-This keeps commands such as `codex resume` fully native and avoids collisions with current or future Codex functionality.
+| Command | Description |
+| --- | --- |
+| `codex-shift login <name>` | Log in to Codex, save the account, and make it current |
+| `codex-shift save <name>` | Save the account Codex is currently using |
+| `codex-shift use <name>` | Switch to a saved profile |
+| `codex-shift list` | List profiles using cached account metadata |
+| `codex-shift status` | Refresh and show plan and weekly usage information |
+| `codex-shift current` | Show the current profile |
+| `codex-shift remove <name>` | Remove a profile that is not current |
+| `codex-shift --help` | Show command help |
+
+Profile names may contain letters, numbers, dots, underscores, and hyphens.
 
 ## Account status
 
-`codex-shift status` uses Codex's structured `app-server` account APIs rather than scraping the interactive `/status` screen. Each saved profile is queried using a temporary `CODEX_HOME`, so checking another account does not replace the user's active `~/.codex/auth.json`.
+`codex-shift status` refreshes the available account and weekly usage information for each saved profile. It performs each check in a temporary `CODEX_HOME`, so refreshing another account does not replace the active `~/.codex/auth.json`.
 
-The status table can show:
+The status table can show the account email, plan, weekly usage remaining, and reset time. If a live lookup fails, previously cached metadata remains available through `codex-shift list`.
 
-- ChatGPT account email
-- plan type (for example Plus or Pro)
-- weekly quota remaining
-- weekly reset time
+## Storage and security
 
-If live lookup fails, previously cached profile metadata remains available through `codex-shift list`.
+Credentials remain on the local machine. Saved profiles are stored under:
+
+```text
+~/.codex-accounts/<profile>/auth.json
+```
+
+On Windows, Codex Shift uses the equivalent path under the user home directory. Authentication tokens are not intentionally printed. Temporary directories created for status queries are removed after each query.
 
 ## Development
-
-Requirements:
-
-- Node.js 20+
-- OpenAI Codex CLI installed and available as `codex`
 
 ```bash
 npm install
@@ -82,42 +104,7 @@ npm run build
 node dist/cli.js --help
 ```
 
-## Platform support
-
-The core CLI is written in TypeScript/Node.js and targets:
-
-- macOS
-- Windows
-- Linux
-
-CI runs against Node.js 20 and 22 on all three operating systems.
-
-## Security
-
-Credentials stay on the local machine. Codex Shift stores profile copies under `~/.codex-accounts/<profile>/auth.json` (or the equivalent user-home path on Windows) and never intentionally prints authentication tokens.
-
-Live status checks copy a profile credential into a temporary Codex home for the duration of the query and remove that directory afterwards.
-
-## Project status
-
-Current MVP foundation:
-
-- profile `save`
-- profile `login`
-- profile `use`
-- local `list`
-- live `status`
-- `current`
-- `remove`
-- structured Codex app-server account/rate-limit reads
-- macOS / Windows / Linux CI
-
-Still planned before the first stable release:
-
-- filesystem locking for simultaneous account mutations
-- automated tests
-- polished npm installation and release workflow
-- optional conflict-safe `codex account ...` compatibility layer
+The GitHub Actions workflow checks Node.js 20 and 22 on macOS, Windows, and Linux.
 
 ## License
 
