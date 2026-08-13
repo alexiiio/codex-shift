@@ -53,14 +53,40 @@ function printProfiles(profiles: AccountProfile[]): void {
     return;
   }
 
-  console.table(profiles.map((profile) => ({
-    current: profile.isCurrent ? '*' : '',
+  const rows = profiles.map((profile) => ({
+    marker: profile.isCurrent ? '*' : ' ',
     name: profile.name,
     account: profile.meta?.email ?? '-',
     plan: formatPlan(profile.meta?.plan),
     weekLeft: profile.meta?.weekLeft === undefined ? '-' : `${profile.meta.weekLeft}%`,
     reset: formatReset(profile.meta?.weekReset),
-  })));
+  }));
+
+  const nameWidth = Math.max('NAME'.length, ...rows.map((row) => row.name.length));
+  const accountWidth = Math.max('ACCOUNT'.length, ...rows.map((row) => row.account.length));
+  const planWidth = Math.max('PLAN'.length, ...rows.map((row) => row.plan.length));
+  const weekLeftWidth = Math.max('WEEK LEFT'.length, ...rows.map((row) => row.weekLeft.length));
+
+  const header = [
+    'NAME'.padEnd(nameWidth),
+    'ACCOUNT'.padEnd(accountWidth),
+    'PLAN'.padEnd(planWidth),
+    'WEEK LEFT'.padEnd(weekLeftWidth),
+    'RESET',
+  ].join('   ');
+
+  console.log(`   ${header}`);
+  for (const row of rows) {
+    const columns = [
+      row.name.padEnd(nameWidth),
+      row.account.padEnd(accountWidth),
+      row.plan.padEnd(planWidth),
+      row.weekLeft.padEnd(weekLeftWidth),
+      row.reset,
+    ].join('   ');
+
+    console.log(`${row.marker}  ${columns}`);
+  }
 }
 
 async function main(): Promise<void> {
