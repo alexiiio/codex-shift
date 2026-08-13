@@ -24,7 +24,7 @@ Codex Shift keeps your existing Codex home intact — including configuration, M
 Install the latest version directly from GitHub:
 
 ```bash
-npm install --global github:alexiiio/codex-shift
+npm install --global https://github.com/alexiiio/codex-shift/archive/refs/heads/main.tar.gz
 ```
 
 After installation, verify that the command is available:

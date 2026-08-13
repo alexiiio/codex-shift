@@ -24,7 +24,7 @@ Codex Shift 会保留现有的 Codex Home，包括配置、MCP 服务、会话�
 通过 npm 直接从 GitHub 安装最新版本：
 
 ```bash
-npm install --global github:alexiiio/codex-shift
+npm install --global https://github.com/alexiiio/codex-shift/archive/refs/heads/main.tar.gz
 ```
 
 安装完成后，确认命令可以正常调用：

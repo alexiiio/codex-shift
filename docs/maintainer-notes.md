@@ -45,9 +45,9 @@ Codex Shift 使用独立的 `codex-shift` 命令作为稳定公共接口，不�
 面向用户的安装方式按以下优先级维护：
 
 1. 发布到 npm registry 后，以 `npm install --global codex-shift` 作为首选方式。
-2. npm 正式发布前，使用 `npm install --global github:alexiiio/codex-shift` 从 GitHub 安装。
+2. npm 正式发布前，使用 `npm install --global https://github.com/alexiiio/codex-shift/archive/refs/heads/main.tar.gz` 从 GitHub tarball 安装。
 3. 源码安装脚本作为需要检查或修改源码时的备用方式。
 
 Homebrew 官方仓库当前没有 Codex Shift formula。稳定发布并建立版本化归档后，可以选择维护独立 tap，或在符合要求时向 `homebrew-core` 提交 formula。
 
-GitHub 安装直接使用仓库中已构建的 `dist`，避免在 npm 的临时 Git 环境中依赖 TypeScript 编译器。修改源码后必须运行 `npm run build`，并将对应的 `dist` 更新一同提交。
+GitHub tarball 安装直接使用仓库中已构建的 `dist`，避免在 npm 的临时 Git 环境中依赖 TypeScript 编译器。不要使用 `github:alexiiio/codex-shift` Git 依赖语法；npm 10 的全局安装可能留下指向已删除临时缓存的软链接。修改源码后必须运行 `npm run build`，并将对应的 `dist` 更新一同提交。
