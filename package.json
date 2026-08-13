@@ -2,6 +2,14 @@
   "name": "codex-shift",
   "version": "0.2.0",
   "description": "Cross-platform account switching for OpenAI Codex CLI.",
+  "homepage": "https://github.com/alexiiio/codex-shift#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alexiiio/codex-shift.git"
+  },
+  "bugs": {
+    "url": "https://github.com/alexiiio/codex-shift/issues"
+  },
   "type": "module",
   "bin": {
     "codex-shift": "dist/cli.js"
@@ -13,18 +21,21 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "dev": "tsx src/cli.ts",
     "check": "tsc -p tsconfig.json --noEmit",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run check",
     "start": "node dist/cli.js"
   },
   "engines": {
     "node": ">=20"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "license": "MIT",
   "keywords": ["openai", "codex", "cli", "account", "profile", "switcher"],
   "devDependencies": {
     "@types/node": "^24.0.0",
-    "tsx": "^4.20.0",
     "typescript": "^5.9.0"
   }
 }

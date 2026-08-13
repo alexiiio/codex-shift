@@ -39,3 +39,13 @@ Codex Shift 使用独立的 `codex-shift` 命令作为稳定公共接口，不�
 - 增加自动化测试
 - 完善 npm 发布流程
 - 评估可选且无冲突的 `codex account ...` 兼容层
+
+## 分发策略
+
+面向用户的安装方式按以下优先级维护：
+
+1. 发布到 npm registry 后，以 `npm install --global codex-shift` 作为首选方式。
+2. npm 正式发布前，使用 `npm install --global github:alexiiio/codex-shift` 从 GitHub 安装。
+3. 源码安装脚本作为需要检查或修改源码时的备用方式。
+
+Homebrew 官方仓库当前没有 Codex Shift formula。稳定发布并建立版本化归档后，可以选择维护独立 tap，或在符合要求时向 `homebrew-core` 提交 formula。

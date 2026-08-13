@@ -19,6 +19,20 @@ Codex Shift keeps your existing Codex home intact — including configuration, M
 - Node.js 20 or later
 - [OpenAI Codex CLI](https://developers.openai.com/codex/cli) installed and available as `codex`
 
+### Install with npm (recommended)
+
+Install the latest version directly from GitHub:
+
+```bash
+npm install --global github:alexiiio/codex-shift
+```
+
+After installation, verify that the command is available:
+
+```bash
+codex-shift --help
+```
+
 ### Install from source
 
 macOS and Linux:
@@ -37,7 +51,7 @@ cd codex-shift
 powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1
 ```
 
-The installer downloads the project dependencies, checks and builds the source, and installs the `codex-shift` command globally with npm.
+The source installer downloads the project dependencies, checks and builds the source, and installs the `codex-shift` command globally with npm.
 
 To update a source installation, pull the latest changes and run the installer again.
 

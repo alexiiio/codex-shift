@@ -19,6 +19,20 @@ Codex Shift 会保留现有的 Codex Home，包括配置、MCP 服务、会话�
 - Node.js 20 或更高版本
 - 已安装 [OpenAI Codex CLI](https://developers.openai.com/codex/cli)，并可通过 `codex` 命令调用
 
+### 使用 npm 安装（推荐）
+
+通过 npm 直接从 GitHub 安装最新版本：
+
+```bash
+npm install --global github:alexiiio/codex-shift
+```
+
+安装完成后，确认命令可以正常调用：
+
+```bash
+codex-shift --help
+```
+
 ### 从源码安装
 
 macOS 和 Linux：
@@ -37,7 +51,7 @@ cd codex-shift
 powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1
 ```
 
-安装脚本会下载项目依赖、检查并构建源码，然后通过 npm 将 `codex-shift` 命令全局安装到当前系统。
+源码安装脚本会下载项目依赖、检查并构建源码，然后通过 npm 将 `codex-shift` 命令全局安装到当前系统。
 
 需要更新源码安装版本时，拉取最新代码并重新运行安装脚本即可。
 
