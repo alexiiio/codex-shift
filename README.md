@@ -85,19 +85,18 @@ codex
 | `codex-shift login <name>` | Log in to Codex, save the account, and make it current |
 | `codex-shift save <name>` | Save the account Codex is currently using |
 | `codex-shift use <name>` | Switch to a saved profile |
-| `codex-shift list` | List profiles using cached account metadata |
-| `codex-shift status` | Refresh and show plan and weekly usage information |
+| `codex-shift list` | Refresh and list saved profiles, falling back to cached data on failure |
 | `codex-shift current` | Show the current profile |
 | `codex-shift remove <name>` | Remove a profile that is not current |
 | `codex-shift --help` | Show command help |
 
 Profile names may contain letters, numbers, dots, underscores, and hyphens.
 
-## Account status
+## Account information
 
-`codex-shift status` refreshes the available account and weekly usage information for each saved profile. It performs each check in a temporary `CODEX_HOME`, so refreshing another account does not replace the active `~/.codex/auth.json`.
+`codex-shift list` refreshes the available account and weekly usage information for each saved profile. It performs each check in a temporary `CODEX_HOME`, so refreshing another account does not replace the active `~/.codex/auth.json`.
 
-The status table can show the account email, plan, weekly usage remaining, and reset time. If a live lookup fails, previously cached metadata remains available through `codex-shift list`.
+The account table can show the email, plan, weekly usage remaining, and reset time. Reset times use the local timezone of the machine running Codex Shift. If a live lookup fails for a profile, its previously cached metadata is displayed instead.
 
 ## Storage and security
 
@@ -107,7 +106,7 @@ Credentials remain on the local machine. Saved profiles are stored under:
 ~/.codex-accounts/<profile>/auth.json
 ```
 
-On Windows, Codex Shift uses the equivalent path under the user home directory. Authentication tokens are not intentionally printed. Temporary directories created for status queries are removed after each query.
+On Windows, Codex Shift uses the equivalent path under the user home directory. Authentication tokens are not intentionally printed. Temporary directories created for account queries are removed after each query.
 
 ## Development
 

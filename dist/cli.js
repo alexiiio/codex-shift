@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-import { getCurrentProfile, listProfiles, loginProfile, refreshAllProfiles, removeProfile, saveCurrentAs, switchTo, } from './accounts.js';
+import { getCurrentProfile, loginProfile, refreshAllProfiles, removeProfile, saveCurrentAs, switchTo, } from './accounts.js';
 const VERSION = '0.2.0';
 function usage() {
-    console.log(`Codex Shift ${VERSION}\n\nCross-platform account switching for OpenAI Codex CLI.\n\nCommands:\n  login <name>      Login and save a new Codex account\n  save <name>       Save the currently logged-in Codex account\n  use <name>        Switch the default account\n  list              List saved accounts using cached metadata\n  status            Refresh and show account plan and weekly rate limits\n  current           Show the current account\n  remove <name>     Remove a saved account\n  version           Show version\n`);
+    console.log(`Codex Shift ${VERSION}\n\nCross-platform account switching for OpenAI Codex CLI.\n\nCommands:\n  login <name>      Login and save a new Codex account\n  save <name>       Save the currently logged-in Codex account\n  use <name>        Switch the default account\n  list              Refresh and list saved accounts\n  current           Show the current account\n  remove <name>     Remove a saved account\n  version           Show version\n`);
 }
 function requireName(args) {
     const name = args[0];
@@ -57,7 +57,7 @@ function printProfiles(profiles) {
         'ACCOUNT'.padEnd(accountWidth),
         'PLAN'.padEnd(planWidth),
         'WEEK LEFT'.padEnd(weekLeftWidth),
-        'RESET',
+        'RESET TIME',
     ].join('   ');
     console.log(`   ${header}`);
     for (const row of rows) {
@@ -94,11 +94,7 @@ async function main() {
             break;
         }
         case 'list':
-        case 'ls':
-            printProfiles(await listProfiles());
-            break;
-        case 'status':
-            console.log('Refreshing account status...');
+            console.log('Refreshing account information...');
             printProfiles(await refreshAllProfiles());
             break;
         case 'current':

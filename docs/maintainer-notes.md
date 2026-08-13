@@ -16,7 +16,7 @@ Codex Shift 使用独立的 `codex-shift` 命令作为稳定公共接口，不�
 
 ## 账号状态实现
 
-`codex-shift status` 使用 Codex 的结构化 `app-server` 账号接口，而不是解析交互式 `/status` 文本。查询每个 profile 时会创建临时 `CODEX_HOME`，避免替换用户当前使用的认证文件；实时查询失败时继续保留之前缓存的账号信息。
+`codex-shift list` 使用 Codex 的结构化 `app-server` 账号接口，而不是解析交互式 `/status` 文本。查询每个 profile 时会创建临时 `CODEX_HOME`，避免替换用户当前使用的认证文件；单个 profile 实时查询失败时显示之前缓存的账号信息。重置时间通过 `Intl.DateTimeFormat` 使用本机时区格式化。
 
 ## 项目进度
 
@@ -25,8 +25,7 @@ Codex Shift 使用独立的 `codex-shift` 命令作为稳定公共接口，不�
 - profile `save`
 - profile `login`
 - profile `use`
-- 本地 `list`
-- 实时 `status`
+- 联网刷新并支持缓存回退的 `list`
 - `current`
 - `remove`
 - Codex app-server 结构化账号和 rate-limit 查询

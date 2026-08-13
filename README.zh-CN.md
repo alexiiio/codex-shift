@@ -85,19 +85,18 @@ codex
 | `codex-shift login <name>` | 登录 Codex、保存账号并设为当前 profile |
 | `codex-shift save <name>` | 保存 Codex 当前正在使用的账号 |
 | `codex-shift use <name>` | 切换到已保存的 profile |
-| `codex-shift list` | 使用缓存的账号信息列出所有 profile |
-| `codex-shift status` | 刷新并显示订阅和周额度信息 |
+| `codex-shift list` | 刷新并列出所有 profile，查询失败时显示缓存数据 |
 | `codex-shift current` | 显示当前 profile |
 | `codex-shift remove <name>` | 删除一个非当前 profile |
 | `codex-shift --help` | 显示命令帮助 |
 
 Profile 名称可以包含英文字母、数字、点、下划线和连字符。
 
-## 账号状态
+## 账号信息
 
-`codex-shift status` 会刷新每个已保存 profile 的可用账号信息和周额度信息。每次查询都在临时 `CODEX_HOME` 中进行，因此刷新其他账号的状态不会替换当前使用的 `~/.codex/auth.json`。
+`codex-shift list` 会刷新每个已保存 profile 的可用账号信息和周额度信息。每次查询都在临时 `CODEX_HOME` 中进行，因此刷新其他账号的信息不会替换当前使用的 `~/.codex/auth.json`。
 
-状态列表可以显示账号邮箱、订阅类型、周额度剩余量和重置时间。如果实时查询失败，之前缓存的信息仍可通过 `codex-shift list` 查看。
+账号列表可以显示邮箱、订阅类型、周额度剩余量和重置时间。重置时间使用运行 Codex Shift 的本机时区。某个 profile 的实时查询失败时，会改为显示该 profile 之前缓存的信息。
 
 ## 存储与安全
 
@@ -107,7 +106,7 @@ Profile 名称可以包含英文字母、数字、点、下划线和连字符。
 ~/.codex-accounts/<profile>/auth.json
 ```
 
-Windows 使用用户主目录下的对应路径。Codex Shift 不会主动打印认证 token；状态查询创建的临时目录会在每次查询结束后删除。
+Windows 使用用户主目录下的对应路径。Codex Shift 不会主动打印认证 token；账号查询创建的临时目录会在每次查询结束后删除。
 
 ## 开发
 
