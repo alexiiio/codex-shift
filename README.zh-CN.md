@@ -56,7 +56,13 @@ codex-shift save personal
 codex-shift current
 ```
 
-运行 `codex-shift login work` 可以添加另一个账号，然后通过交互列表查看并切换 profile：
+登录另一个账号，并将它保存为 profile。`work` 同样只是可以自定义的名称示例：
+
+```bash
+codex-shift login work
+```
+
+查看账号及周额度信息，并通过交互列表切换 profile：
 
 ```bash
 codex-shift list
@@ -66,7 +72,13 @@ codex-shift list
 
 _图片仅为功能示意，使用脱敏数据；凭据和 token 不会显示在列表中。_
 
-运行 `codex-shift init-week --dry-run` 可以预览尚未启动周额度窗口的账号，并且不会消耗额度。
+启动尚未开始计算的周额度窗口：
+
+```bash
+codex-shift init-week
+```
+
+Codex Shift 会检测符合条件的账号，展示本次使用的最小模型与推理方案，支持逐账号选择，并在为每个选中账号发送一次刻意精简的请求前进行最终确认。选择取消不会发送请求，也不会消耗额度。
 
 ## 命令
 

@@ -56,7 +56,13 @@ codex-shift save personal
 codex-shift current
 ```
 
-Add another account with `codex-shift login work`, then review and switch profiles interactively:
+Log in to another account and save it as a profile. `work` is also an example name that you can customize:
+
+```bash
+codex-shift login work
+```
+
+Review account and weekly usage information, then switch profiles interactively:
 
 ```bash
 codex-shift list
@@ -66,7 +72,13 @@ codex-shift list
 
 _Illustrative data only. Credentials and tokens are never displayed._
 
-Preview accounts with unstarted weekly windows—without using quota—with `codex-shift init-week --dry-run`.
+Start weekly usage windows that have not begun yet:
+
+```bash
+codex-shift init-week
+```
+
+Codex Shift detects eligible accounts, shows the minimal model and reasoning plan, lets you choose accounts individually, and asks for final confirmation before sending one deliberately small request per selected account. Cancelling sends no requests and uses no quota.
 
 ## Commands
 
