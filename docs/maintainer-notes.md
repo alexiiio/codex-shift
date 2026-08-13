@@ -50,3 +50,14 @@ Codex Shift 使用独立的 `codex-shift` 命令作为稳定公共接口，不�
 Homebrew 官方仓库当前没有 Codex Shift formula。稳定发布并建立版本化归档后，可以选择维护独立 tap，或在符合要求时向 `homebrew-core` 提交 formula。
 
 GitHub tarball 安装直接使用仓库中已构建的 `dist`，避免在 npm 的临时 Git 环境中依赖 TypeScript 编译器。不要使用 `github:alexiiio/codex-shift` Git 依赖语法；npm 10 的全局安装可能留下指向已删除临时缓存的软链接。修改源码后必须运行 `npm run build`，并将对应的 `dist` 更新一同提交。
+
+## 本地开发与验证
+
+```bash
+npm install
+npm run check
+npm run build
+node dist/cli.js --help
+```
+
+GitHub Actions 在 macOS、Windows 和 Linux 上，分别使用 Node.js 20 和 22 进行检查和构建。交互式列表还应在真实 TTY 中验证方向键、二次确认、刷新、退出、Ctrl+C、窗口缩放，以及管道和重定向时的非交互降级。

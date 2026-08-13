@@ -1,6 +1,18 @@
 #!/usr/bin/env node
+import readline from 'node:readline';
 import { getCurrentProfile, loginProfile, refreshAllProfiles, removeProfile, saveCurrentAs, switchTo, } from './accounts.js';
 const VERSION = '0.2.0';
+const ANSI = {
+    altScreenOn: '\u001b[?1049h',
+    altScreenOff: '\u001b[?1049l',
+    clear: '\u001b[2J\u001b[H',
+    reset: '\u001b[0m',
+    bold: '\u001b[1m',
+    dim: '\u001b[2m',
+    cyan: '\u001b[36m',
+    green: '\u001b[32m',
+    yellow: '\u001b[33m',
+};
 function usage() {
     console.log(`Codex Shift ${VERSION}\n\nCross-platform account switching for OpenAI Codex CLI.\n\nCommands:\n  login <name>      Login and save a new Codex account\n  save <name>       Save the currently logged-in Codex account\n  use <name>        Switch the default account\n  list              Refresh and list saved accounts\n  current           Show the current account\n  remove <name>     Remove a saved account\n  version           Show version\n`);
 }
@@ -35,19 +47,21 @@ function formatReset(timestamp) {
         minute: '2-digit',
     }).format(new Date(timestamp * 1000));
 }
-function printProfiles(profiles) {
-    if (profiles.length === 0) {
-        console.log('No saved accounts.');
-        return;
-    }
-    const rows = profiles.map((profile) => ({
-        marker: profile.isCurrent ? '*' : ' ',
+function createRows(profiles) {
+    return profiles.map((profile) => ({
+        profile,
         name: profile.name,
         account: profile.meta?.email ?? '-',
         plan: formatPlan(profile.meta?.plan),
         weekLeft: profile.meta?.weekLeft === undefined ? '-' : `${profile.meta.weekLeft}%`,
         reset: formatReset(profile.meta?.weekReset),
     }));
+}
+function paint(enabled, style, text) {
+    return enabled ? `${style}${text}${ANSI.reset}` : text;
+}
+function formatProfileTable(profiles, selectedIndex, color = false) {
+    const rows = createRows(profiles);
     const nameWidth = Math.max('NAME'.length, ...rows.map((row) => row.name.length));
     const accountWidth = Math.max('ACCOUNT'.length, ...rows.map((row) => row.account.length));
     const planWidth = Math.max('PLAN'.length, ...rows.map((row) => row.plan.length));
@@ -59,8 +73,8 @@ function printProfiles(profiles) {
         'WEEK LEFT'.padEnd(weekLeftWidth),
         'RESET TIME',
     ].join('   ');
-    console.log(`   ${header}`);
-    for (const row of rows) {
+    const lines = [`    ${paint(color, `${ANSI.bold}${ANSI.dim}`, header)}`];
+    rows.forEach((row, index) => {
         const columns = [
             row.name.padEnd(nameWidth),
             row.account.padEnd(accountWidth),
@@ -68,8 +82,177 @@ function printProfiles(profiles) {
             row.weekLeft.padEnd(weekLeftWidth),
             row.reset,
         ].join('   ');
-        console.log(`${row.marker}  ${columns}`);
+        const cursor = index === selectedIndex ? paint(color, `${ANSI.bold}${ANSI.cyan}`, '›') : ' ';
+        const current = row.profile.isCurrent ? paint(color, ANSI.green, '●') : ' ';
+        const content = index === selectedIndex ? paint(color, `${ANSI.bold}${ANSI.cyan}`, columns) : columns;
+        lines.push(`${cursor} ${current} ${content}`);
+    });
+    return lines.join('\n');
+}
+function printProfiles(profiles) {
+    if (profiles.length === 0) {
+        console.log('No saved accounts.');
+        return;
     }
+    console.log(formatProfileTable(profiles));
+}
+function canUseInteractiveList() {
+    return Boolean(process.stdin.isTTY
+        && process.stdout.isTTY
+        && process.env.TERM !== 'dumb'
+        && typeof process.stdin.setRawMode === 'function');
+}
+async function showInteractiveList(initialProfiles) {
+    let profiles = initialProfiles;
+    let selectedIndex = Math.max(0, profiles.findIndex((profile) => profile.isCurrent));
+    let mode = 'browse';
+    let confirmIndex = 0;
+    let busy = false;
+    let notice = '';
+    let settled = false;
+    const stdin = process.stdin;
+    const stdout = process.stdout;
+    const wasRaw = stdin.isRaw;
+    const useAltScreen = process.env.TERM !== 'dumb' && !process.env.CI;
+    const render = () => {
+        const selected = profiles[selectedIndex];
+        const title = paint(true, `${ANSI.bold}${ANSI.cyan}`, 'Codex Shift');
+        const subtitle = paint(true, ANSI.dim, 'Account profiles');
+        let body = `${title}\n${subtitle}\n\n${formatProfileTable(profiles, selectedIndex, true)}`;
+        if (mode === 'confirm' && selected) {
+            const confirm = confirmIndex === 0 ? paint(true, `${ANSI.bold}${ANSI.cyan}`, '› Confirm switch') : '  Confirm switch';
+            const cancel = confirmIndex === 1 ? paint(true, `${ANSI.bold}${ANSI.cyan}`, '› Cancel') : '  Cancel';
+            body += `\n\n${paint(true, ANSI.yellow, `Switch to '${selected.name}'?`)}\n${paint(true, ANSI.dim, 'The new account will be used by future Codex processes.')}\n\n${confirm}\n${cancel}`;
+            body += `\n\n${paint(true, ANSI.dim, '↑/↓ Select   Enter Confirm   Esc Back')}`;
+        }
+        else {
+            if (notice)
+                body += `\n\n${paint(true, ANSI.green, notice)}`;
+            const help = busy ? 'Refreshing account information…' : '↑/↓ Select   Enter Continue   R Refresh   Q Quit';
+            body += `\n\n${paint(true, ANSI.dim, help)}`;
+            body += `\n${paint(true, ANSI.dim, '● Current account')}`;
+        }
+        stdout.write(`${ANSI.clear}${body}\n`);
+    };
+    return await new Promise((resolve, reject) => {
+        const cleanup = () => {
+            if (settled)
+                return;
+            settled = true;
+            stdin.removeListener('keypress', onKeypress);
+            process.removeListener('SIGINT', onSigint);
+            stdout.removeListener('resize', render);
+            stdin.setRawMode(wasRaw);
+            stdin.pause();
+            stdout.write(`${ANSI.reset}${useAltScreen ? ANSI.altScreenOff : ''}`);
+        };
+        const finish = () => {
+            cleanup();
+            resolve();
+        };
+        const fail = (error) => {
+            cleanup();
+            reject(error);
+        };
+        const onSigint = () => finish();
+        const onKeypress = (_value, key) => {
+            if ((key.ctrl && key.name === 'c') || key.name === 'q') {
+                finish();
+                return;
+            }
+            if (busy)
+                return;
+            if (mode === 'confirm') {
+                if (key.name === 'escape' || key.name === 'n') {
+                    mode = 'browse';
+                    notice = '';
+                }
+                else if (key.name === 'up' || key.name === 'down') {
+                    confirmIndex = confirmIndex === 0 ? 1 : 0;
+                }
+                else if (key.name === 'y') {
+                    confirmIndex = 0;
+                }
+                else if (key.name === 'return' || key.name === 'enter') {
+                    if (confirmIndex === 1) {
+                        mode = 'browse';
+                        notice = '';
+                    }
+                    else {
+                        const selected = profiles[selectedIndex];
+                        busy = true;
+                        void switchTo(selected.name)
+                            .then(() => {
+                            profiles = profiles.map((profile, index) => ({ ...profile, isCurrent: index === selectedIndex }));
+                            mode = 'browse';
+                            notice = `✓ Switched to '${selected.name}'.`;
+                        })
+                            .catch(fail)
+                            .finally(() => {
+                            busy = false;
+                            if (!settled)
+                                render();
+                        });
+                        return;
+                    }
+                }
+                render();
+                return;
+            }
+            if (key.name === 'escape') {
+                finish();
+            }
+            else if (key.name === 'up') {
+                selectedIndex = (selectedIndex - 1 + profiles.length) % profiles.length;
+                notice = '';
+                render();
+            }
+            else if (key.name === 'down') {
+                selectedIndex = (selectedIndex + 1) % profiles.length;
+                notice = '';
+                render();
+            }
+            else if (key.name === 'return' || key.name === 'enter') {
+                const selected = profiles[selectedIndex];
+                if (selected.isCurrent) {
+                    notice = `Already using '${selected.name}'.`;
+                }
+                else {
+                    mode = 'confirm';
+                    confirmIndex = 0;
+                    notice = '';
+                }
+                render();
+            }
+            else if (key.name === 'r') {
+                const selectedName = profiles[selectedIndex]?.name;
+                busy = true;
+                notice = '';
+                render();
+                void refreshAllProfiles()
+                    .then((refreshed) => {
+                    profiles = refreshed;
+                    selectedIndex = Math.max(0, profiles.findIndex((profile) => profile.name === selectedName));
+                    notice = '✓ Account information refreshed.';
+                })
+                    .catch(fail)
+                    .finally(() => {
+                    busy = false;
+                    if (!settled)
+                        render();
+                });
+            }
+        };
+        readline.emitKeypressEvents(stdin);
+        if (useAltScreen)
+            stdout.write(ANSI.altScreenOn);
+        stdin.setRawMode(true);
+        stdin.resume();
+        stdin.on('keypress', onKeypress);
+        process.on('SIGINT', onSigint);
+        stdout.on('resize', render);
+        render();
+    });
 }
 async function main() {
     const [command, ...args] = process.argv.slice(2);
@@ -95,7 +278,13 @@ async function main() {
         }
         case 'list':
             console.log('Refreshing account information...');
-            printProfiles(await refreshAllProfiles());
+            {
+                const profiles = await refreshAllProfiles();
+                if (profiles.length > 1 && canUseInteractiveList())
+                    await showInteractiveList(profiles);
+                else
+                    printProfiles(profiles);
+            }
             break;
         case 'current':
             console.log((await getCurrentProfile()) ?? 'not set');

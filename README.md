@@ -85,7 +85,7 @@ codex
 | `codex-shift login <name>` | Log in to Codex, save the account, and make it current |
 | `codex-shift save <name>` | Save the account Codex is currently using |
 | `codex-shift use <name>` | Switch to a saved profile |
-| `codex-shift list` | Refresh and list saved profiles, falling back to cached data on failure |
+| `codex-shift list` | Refresh profiles and interactively select an account to switch to |
 | `codex-shift current` | Show the current profile |
 | `codex-shift remove <name>` | Remove a profile that is not current |
 | `codex-shift --help` | Show command help |
@@ -98,6 +98,8 @@ Profile names may contain letters, numbers, dots, underscores, and hyphens.
 
 The account table can show the email, plan, weekly usage remaining, and reset time. Reset times use the local timezone of the machine running Codex Shift. If a live lookup fails for a profile, its previously cached metadata is displayed instead.
 
+In an interactive terminal, use the arrow keys to select a profile and press Enter to continue. Choose **Confirm switch** or **Cancel** in the confirmation step; Confirm switch is selected by default. Press `R` to refresh or `Q`/Esc to exit. When output is redirected or piped, `list` prints a non-interactive table and exits.
+
 ## Storage and security
 
 Credentials remain on the local machine. Saved profiles are stored under:
@@ -107,17 +109,6 @@ Credentials remain on the local machine. Saved profiles are stored under:
 ```
 
 On Windows, Codex Shift uses the equivalent path under the user home directory. Authentication tokens are not intentionally printed. Temporary directories created for account queries are removed after each query.
-
-## Development
-
-```bash
-npm install
-npm run check
-npm run build
-node dist/cli.js --help
-```
-
-The GitHub Actions workflow checks Node.js 20 and 22 on macOS, Windows, and Linux.
 
 ## License
 

@@ -85,7 +85,7 @@ codex
 | `codex-shift login <name>` | 登录 Codex、保存账号并设为当前 profile |
 | `codex-shift save <name>` | 保存 Codex 当前正在使用的账号 |
 | `codex-shift use <name>` | 切换到已保存的 profile |
-| `codex-shift list` | 刷新并列出所有 profile，查询失败时显示缓存数据 |
+| `codex-shift list` | 刷新 profile，并通过交互列表选择要切换的账号 |
 | `codex-shift current` | 显示当前 profile |
 | `codex-shift remove <name>` | 删除一个非当前 profile |
 | `codex-shift --help` | 显示命令帮助 |
@@ -98,6 +98,8 @@ Profile 名称可以包含英文字母、数字、点、下划线和连字符。
 
 账号列表可以显示邮箱、订阅类型、周额度剩余量和重置时间。重置时间使用运行 Codex Shift 的本机时区。某个 profile 的实时查询失败时，会改为显示该 profile 之前缓存的信息。
 
+在交互式终端中，使用方向键选择 profile，按 Enter 进入下一步，然后在确认界面选择 `Confirm switch` 或 `Cancel`；默认选中 `Confirm switch`。按 `R` 重新刷新，按 `Q` 或 Esc 退出。输出被重定向或通过管道传递时，`list` 会打印非交互表格并退出。
+
 ## 存储与安全
 
 账号凭据只保存在本机。不同 profile 的凭据存放在：
@@ -107,17 +109,6 @@ Profile 名称可以包含英文字母、数字、点、下划线和连字符。
 ```
 
 Windows 使用用户主目录下的对应路径。Codex Shift 不会主动打印认证 token；账号查询创建的临时目录会在每次查询结束后删除。
-
-## 开发
-
-```bash
-npm install
-npm run check
-npm run build
-node dist/cli.js --help
-```
-
-GitHub Actions 会在 macOS、Windows 和 Linux 上，分别使用 Node.js 20 和 22 进行检查和构建。
 
 ## License
 
