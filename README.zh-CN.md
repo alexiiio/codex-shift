@@ -98,7 +98,7 @@ Profile 名称可以包含英文字母、数字、点、下划线和连字符。
 
 账号列表可以显示邮箱、订阅类型、周额度剩余量和重置时间。重置时间使用运行 Codex Shift 的本机时区。某个 profile 的实时查询失败时，会改为显示该 profile 之前缓存的信息。
 
-在交互式终端中，使用方向键选择 profile，按 Enter 进入下一步，然后在确认界面选择 `Confirm switch` 或 `Cancel`；默认选中 `Confirm switch`。按 `R` 重新刷新，按 `Q` 或 Esc 退出。输出被重定向或通过管道传递时，`list` 会打印非交互表格并退出。
+在交互式终端中，`>` 表示当前选择，`*` 表示当前正在使用的 profile。使用方向键选择 profile，按 Enter 进入下一步，然后在确认界面选择 `Confirm switch` 或 `Cancel`；默认选中 `Confirm switch`。按 `R` 重新刷新，按 `Q` 或 Esc 退出。输出被重定向或通过管道传递时，`list` 会打印非交互表格并退出。
 
 ## 存储与安全
 

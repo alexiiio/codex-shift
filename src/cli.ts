@@ -21,11 +21,9 @@ const ANSI = {
   dim: '\u001b[2m',
   cyan: '\u001b[36m',
   green: '\u001b[32m',
-  yellow: '\u001b[33m',
 };
 
 interface ProfileRow {
-  profile: AccountProfile;
   name: string;
   account: string;
   plan: string;
@@ -70,7 +68,6 @@ function formatReset(timestamp?: number): string {
 
 function createRows(profiles: AccountProfile[]): ProfileRow[] {
   return profiles.map((profile) => ({
-    profile,
     name: profile.name,
     account: profile.meta?.email ?? '-',
     plan: formatPlan(profile.meta?.plan),
@@ -83,6 +80,12 @@ function paint(enabled: boolean, style: string, text: string): string {
   return enabled ? `${style}${text}${ANSI.reset}` : text;
 }
 
+function formatHelp(items: Array<[key: string, label: string]>): string {
+  return items
+    .map(([key, label]) => `${paint(true, `${ANSI.bold}${ANSI.cyan}`, key)} ${paint(true, ANSI.dim, label)}`)
+    .join(paint(true, ANSI.dim, '   '));
+}
+
 function formatProfileTable(profiles: AccountProfile[], selectedIndex?: number, color = false): string {
   const rows = createRows(profiles);
 
@@ -90,29 +93,30 @@ function formatProfileTable(profiles: AccountProfile[], selectedIndex?: number, 
   const accountWidth = Math.max('ACCOUNT'.length, ...rows.map((row) => row.account.length));
   const planWidth = Math.max('PLAN'.length, ...rows.map((row) => row.plan.length));
   const weekLeftWidth = Math.max('WEEK LEFT'.length, ...rows.map((row) => row.weekLeft.length));
+  const resetWidth = Math.max('RESET TIME'.length, ...rows.map((row) => row.reset.length));
 
   const header = [
     'NAME'.padEnd(nameWidth),
     'ACCOUNT'.padEnd(accountWidth),
     'PLAN'.padEnd(planWidth),
     'WEEK LEFT'.padEnd(weekLeftWidth),
-    'RESET TIME',
-  ].join('   ');
+    'RESET TIME'.padEnd(resetWidth),
+  ].join('  ');
 
-  const lines = [`    ${paint(color, `${ANSI.bold}${ANSI.dim}`, header)}`];
+  const lines = [`    ${paint(color, ANSI.dim, header)}`];
   rows.forEach((row, index) => {
+    const selected = index === selectedIndex;
     const columns = [
-      row.name.padEnd(nameWidth),
+      selected ? paint(color, `${ANSI.bold}${ANSI.cyan}`, row.name.padEnd(nameWidth)) : row.name.padEnd(nameWidth),
       row.account.padEnd(accountWidth),
       row.plan.padEnd(planWidth),
       row.weekLeft.padEnd(weekLeftWidth),
-      row.reset,
-    ].join('   ');
+      row.reset.padEnd(resetWidth),
+    ].join('  ');
 
-    const cursor = index === selectedIndex ? paint(color, `${ANSI.bold}${ANSI.cyan}`, '›') : ' ';
-    const current = row.profile.isCurrent ? paint(color, ANSI.green, '●') : ' ';
-    const content = index === selectedIndex ? paint(color, `${ANSI.bold}${ANSI.cyan}`, columns) : columns;
-    lines.push(`${cursor} ${current} ${content}`);
+    const cursor = selected ? paint(color, `${ANSI.bold}${ANSI.cyan}`, '›') : ' ';
+    const current = profiles[index].isCurrent ? paint(color, `${ANSI.bold}${ANSI.green}`, '*') : ' ';
+    lines.push(`${cursor} ${current} ${columns}`);
   });
 
   return lines.join('\n');
@@ -152,20 +156,27 @@ async function showInteractiveList(initialProfiles: AccountProfile[]): Promise<v
 
   const render = (): void => {
     const selected = profiles[selectedIndex];
-    const title = paint(true, `${ANSI.bold}${ANSI.cyan}`, 'Codex Shift');
-    const subtitle = paint(true, ANSI.dim, 'Account profiles');
-    let body = `${title}\n${subtitle}\n\n${formatProfileTable(profiles, selectedIndex, true)}`;
+    const current = profiles.find((profile) => profile.isCurrent);
+    const title = paint(true, ANSI.bold, 'Codex Shift');
+    let body = title;
 
     if (mode === 'confirm' && selected) {
       const confirm = confirmIndex === 0 ? paint(true, `${ANSI.bold}${ANSI.cyan}`, '› Confirm switch') : '  Confirm switch';
       const cancel = confirmIndex === 1 ? paint(true, `${ANSI.bold}${ANSI.cyan}`, '› Cancel') : '  Cancel';
-      body += `\n\n${paint(true, ANSI.yellow, `Switch to '${selected.name}'?`)}\n${paint(true, ANSI.dim, 'The new account will be used by future Codex processes.')}\n\n${confirm}\n${cancel}`;
-      body += `\n\n${paint(true, ANSI.dim, '↑/↓ Select   Enter Confirm   Esc Back')}`;
+      const targetMeta = createRows([selected])[0];
+      const fromName = current?.name ?? 'current account';
+      const accountRoute = `${paint(true, ANSI.dim, fromName)}  ${paint(true, ANSI.cyan, '→')}  ${paint(true, `${ANSI.bold}${ANSI.cyan}`, selected.name)}`;
+      const targetDetails = paint(true, ANSI.dim, `${targetMeta.account}  ·  ${targetMeta.plan}`);
+      body += `\n${paint(true, ANSI.dim, 'Confirm account switch')}\n\n  ${accountRoute}\n  ${targetDetails}`;
+      body += `\n\n${paint(true, ANSI.dim, 'Future Codex processes will use the selected account.')}\n\n${confirm}\n${cancel}`;
+      body += `\n\n${formatHelp([['↑/↓', 'Move'], ['Enter', 'Confirm'], ['Esc', 'Back']])}`;
     } else {
+      body += `\n${paint(true, ANSI.dim, `${profiles.length} profiles · Choose an account`)}\n\n${formatProfileTable(profiles, selectedIndex, true)}`;
       if (notice) body += `\n\n${paint(true, ANSI.green, notice)}`;
-      const help = busy ? 'Refreshing account information…' : '↑/↓ Select   Enter Continue   R Refresh   Q Quit';
-      body += `\n\n${paint(true, ANSI.dim, help)}`;
-      body += `\n${paint(true, ANSI.dim, '● Current account')}`;
+      const help = busy
+        ? paint(true, ANSI.dim, 'Refreshing account information…')
+        : formatHelp([['↑/↓', 'Move'], ['Enter', 'Select'], ['R', 'Refresh'], ['Q', 'Quit']]);
+      body += `\n\n${help}`;
     }
 
     stdout.write(`${ANSI.clear}${body}\n`);
