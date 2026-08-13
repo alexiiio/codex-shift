@@ -4,13 +4,18 @@
   <strong>English</strong> | <a href="README.zh-CN.md">简体中文</a>
 </p>
 
-Cross-platform account switching for OpenAI Codex CLI.
+Cross-platform account switching and weekly usage-window initialization for OpenAI Codex CLI.
 
-**Switch accounts. Keep your workflow.**
+**Switch accounts. Start weekly windows. Keep your workflow.**
 
 > Codex Shift is an unofficial third-party utility and is not affiliated with or endorsed by OpenAI.
 
-Codex Shift keeps your existing Codex home intact — including configuration, MCP servers, sessions, and history. It stores multiple login profiles locally and lets you choose which one becomes the active `~/.codex/auth.json`.
+Core features include:
+
+- **Switch accounts:** Store multiple Codex login profiles locally, review their account and weekly usage information, and choose which one becomes active.
+- **Start weekly usage windows:** Detect saved accounts whose weekly window has not begun and, only after confirmation, send one deliberately minimal Codex request to start it.
+
+Both workflows keep your existing Codex home intact — including configuration, MCP servers, sessions, and history. Account switching only replaces the active `~/.codex/auth.json`; weekly initialization runs in an isolated temporary environment.
 
 ## Installation
 
@@ -71,7 +76,23 @@ Log in to another account and save it as a profile:
 codex-shift login work
 ```
 
-Switch profiles, then continue using Codex normally:
+View account information and switch profiles interactively:
+
+```bash
+codex-shift list
+```
+
+The list refreshes each profile's account, plan, weekly usage, and reset time. Use the arrow keys to choose an account, press Enter, and confirm the switch. The `*` marker identifies the account Codex is currently using.
+
+Start weekly usage windows that have not begun yet:
+
+```bash
+codex-shift init-week
+```
+
+Codex Shift detects eligible accounts and asks for confirmation before sending one minimal request per account. No quota is consumed if you cancel. The request is deliberately kept much smaller than a normal coding task: it asks only for `OK`, uses no project context or persistent history, and selects the lowest-cost available model and reasoning effort. See [Start unused weekly windows](#start-unused-weekly-windows) for details.
+
+You can also switch directly by profile name, then continue using Codex normally:
 
 ```bash
 codex-shift use personal
@@ -86,6 +107,7 @@ codex
 | `codex-shift save <name>` | Save the account Codex is currently using |
 | `codex-shift use <name>` | Switch to a saved profile |
 | `codex-shift list` | Refresh profiles and interactively select an account to switch to |
+| `codex-shift init-week` | Start weekly windows that have not begun yet with one minimal Codex request |
 | `codex-shift current` | Show the current profile |
 | `codex-shift remove <name>` | Remove a profile that is not current |
 | `codex-shift --help` | Show command help |
@@ -96,9 +118,33 @@ Profile names may contain letters, numbers, dots, underscores, and hyphens.
 
 `codex-shift list` refreshes the available account and weekly usage information for each saved profile. It performs each check in a temporary `CODEX_HOME`, so refreshing another account does not replace the active `~/.codex/auth.json`.
 
-The account table can show the email, plan, weekly usage remaining, and reset time. Reset times use the local timezone of the machine running Codex Shift. If a live lookup fails for a profile, its previously cached metadata is displayed instead.
+The account table can show the email, plan, weekly usage remaining, and reset time. Reset times use the local timezone of the machine running Codex Shift. When an unused weekly window returns a reset time that advances with each lookup, Codex Shift displays `Not started` instead of the moving time. If a live lookup fails for a profile, its previously cached metadata is displayed instead.
 
 In an interactive terminal, `>` marks the selected profile and `*` marks the current profile. Use the arrow keys to select a profile and press Enter to continue. Choose **Confirm switch** or **Cancel** in the confirmation step; Confirm switch is selected by default. Press `R` to refresh or `Q`/Esc to exit. When output is redirected or piped, `list` prints a non-interactive table and exits.
+
+### Start unused weekly windows
+
+Some accounts do not start their weekly usage window until their first Codex request. Run:
+
+```bash
+codex-shift init-week
+```
+
+Codex Shift checks each profile twice without consuming quota and selects only accounts whose reset time is confirmed to be moving with the lookup time. It then shows the target accounts and asks for confirmation; **Cancel** is selected by default. Use the arrow keys and Enter to choose. After confirmation, it sends one short, read-only, ephemeral Codex request per target account, then refreshes the cached reset time. Failed requests are not retried automatically.
+
+Before each request, Codex Shift uses the account's model catalog to select the available model with the lowest cost in its bundled OpenAI rate-card ranking, preferring GPT-5.6 Luna, and uses the lowest reasoning effort that model supports. Pricing pages are not queried at runtime. If no available model has a known cost, Codex Shift uses the account's default model; if the model catalog is unavailable, the Codex CLI default is used.
+
+Quota usage is intentionally minimized:
+
+- The fixed prompt asks the model to reply with `OK` only.
+- The request runs in an empty temporary directory and instructs the model not to inspect files or use tools.
+- User configuration and rules are ignored, so project instructions and configured MCP servers do not add context.
+- The session is ephemeral and has no conversation history.
+- The lowest-cost known available model and its lowest supported reasoning effort are selected.
+
+Only the final confirmed request consumes quota; account checks and model-list lookups do not generate model responses. The exact usage cannot be guaranteed because OpenAI calculates it from the model, context, reasoning, tools, and input/output tokens. This request is designed to be much smaller than a normal Codex task, and the resulting change may be too small to appear in the rounded `WEEK LEFT` percentage. See [OpenAI Codex pricing](https://learn.chatgpt.com/docs/pricing) for how usage is calculated.
+
+The request uses an isolated temporary `CODEX_HOME`, so it does not switch the active account or create a persistent Codex session. Run it in an interactive terminal; redirected or piped input cancels without sending requests.
 
 ## Storage and security
 

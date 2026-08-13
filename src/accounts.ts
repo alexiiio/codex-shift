@@ -9,10 +9,22 @@ import {
   profileDir,
   profileMetaPath,
 } from './paths.js';
-import { loginWithCodex, queryAccountFromAuth } from './codex.js';
-import type { AccountMeta, AccountProfile } from './types.js';
+import {
+  loginWithCodex,
+  probeAccountFromAuth,
+  queryAccountFromAuth,
+  triggerWeeklyWindowFromAuth,
+} from './codex.js';
+import type { AccountMeta, AccountProfile, AccountStatus } from './types.js';
 
 const NAME_RE = /^[a-zA-Z0-9._-]+$/;
+const RESET_SHIFT_TOLERANCE_SECONDS = 5;
+
+export interface WeeklyWindowInspection {
+  profiles: AccountProfile[];
+  targets: AccountProfile[];
+  unknown: AccountProfile[];
+}
 
 export function validateName(name: string): void {
   if (!NAME_RE.test(name)) {
@@ -93,18 +105,64 @@ export async function writeMeta(name: string, meta: AccountMeta): Promise<void> 
   await fs.writeFile(profileMetaPath(name), JSON.stringify(meta, null, 2) + '\n', 'utf8');
 }
 
-export async function refreshProfileMeta(name: string): Promise<AccountMeta> {
+async function readMeta(name: string): Promise<AccountMeta | undefined> {
+  try {
+    return JSON.parse(await fs.readFile(profileMetaPath(name), 'utf8')) as AccountMeta;
+  } catch {
+    return undefined;
+  }
+}
+
+export function inferWeekStarted(
+  previous: AccountMeta | undefined,
+  status: AccountStatus,
+  observedAt: Date,
+): boolean | undefined {
+  if (status.weekStarted !== undefined) return status.weekStarted;
+  if ((status.weekUsedPercent ?? 0) > 0) return true;
+  if (status.weekReset === undefined || status.weekUsedPercent === undefined) return undefined;
+
+  const isUnused = status.weekUsedPercent === 0;
+  const previousWasUnused = previous?.weekUsedPercent === 0 || previous?.weekLeft === 100;
+  const previousObservedAt = previous?.updatedAt ? Date.parse(previous.updatedAt) / 1000 : Number.NaN;
+  if (isUnused && previousWasUnused && previous?.weekReset !== undefined && Number.isFinite(previousObservedAt)) {
+    const elapsed = observedAt.getTime() / 1000 - previousObservedAt;
+    const resetShift = status.weekReset - previous.weekReset;
+    if (elapsed >= 1) {
+      if (resetShift === 0) return true;
+      if (Math.abs(resetShift - elapsed) <= RESET_SHIFT_TOLERANCE_SECONDS) return false;
+    }
+  }
+
+  const now = observedAt.getTime() / 1000;
+  if (previous?.weekStarted === true && (previous.weekReset ?? 0) > now) return true;
+  if (previous?.weekStarted === false && isUnused) return false;
+  return undefined;
+}
+
+async function saveStatus(
+  name: string,
+  status: AccountStatus,
+  forcedWeekStarted?: boolean,
+): Promise<AccountMeta> {
+  const observedAt = new Date();
+  const previous = await readMeta(name);
+  const meta: AccountMeta = {
+    ...status,
+    weekStarted: forcedWeekStarted ?? inferWeekStarted(previous, status, observedAt),
+    updatedAt: observedAt.toISOString(),
+  };
+  await writeMeta(name, meta);
+  return meta;
+}
+
+export async function refreshProfileMeta(name: string, forcedWeekStarted?: boolean): Promise<AccountMeta> {
   validateName(name);
   const auth = profileAuthPath(name);
   if (!(await exists(auth))) throw new Error(`Profile '${name}' does not exist.`);
 
   const status = await queryAccountFromAuth(auth);
-  const meta: AccountMeta = {
-    ...status,
-    updatedAt: new Date().toISOString(),
-  };
-  await writeMeta(name, meta);
-  return meta;
+  return await saveStatus(name, status, forcedWeekStarted);
 }
 
 export async function refreshAllProfiles(): Promise<AccountProfile[]> {
@@ -134,15 +192,56 @@ export async function listProfiles(): Promise<AccountProfile[]> {
     const auth = profileAuthPath(entry.name);
     if (!(await exists(auth))) continue;
 
-    let meta: AccountMeta | undefined;
-    try {
-      meta = JSON.parse(await fs.readFile(profileMetaPath(entry.name), 'utf8')) as AccountMeta;
-    } catch {
-      // Metadata is optional and may not exist yet.
-    }
+    const meta = await readMeta(entry.name);
 
     profiles.push({ name: entry.name, isCurrent: entry.name === current, meta });
   }
 
   return profiles.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function inspectWeeklyWindows(): Promise<WeeklyWindowInspection> {
+  await syncCurrentAuth();
+  const profiles = await listProfiles();
+  const inspected: AccountProfile[] = [];
+  const targets: AccountProfile[] = [];
+  const unknown: AccountProfile[] = [];
+
+  for (const profile of profiles) {
+    let next = profile;
+    try {
+      const status = await probeAccountFromAuth(profileAuthPath(profile.name));
+      const meta = await saveStatus(profile.name, status);
+      next = { ...profile, meta };
+    } catch {
+      unknown.push(profile);
+      inspected.push(profile);
+      continue;
+    }
+
+    inspected.push(next);
+    if (next.meta?.weekStarted === false) targets.push(next);
+    else if (next.meta?.weekStarted === undefined) unknown.push(next);
+  }
+
+  return { profiles: inspected, targets, unknown };
+}
+
+export async function initializeWeeklyWindow(name: string): Promise<AccountMeta> {
+  validateName(name);
+  const auth = profileAuthPath(name);
+  if (!(await exists(auth))) throw new Error(`Profile '${name}' does not exist.`);
+
+  await triggerWeeklyWindowFromAuth(auth);
+  try {
+    return await refreshProfileMeta(name, true);
+  } catch {
+    const meta: AccountMeta = {
+      ...(await readMeta(name)),
+      weekStarted: true,
+      updatedAt: new Date().toISOString(),
+    };
+    await writeMeta(name, meta);
+    return meta;
+  }
 }

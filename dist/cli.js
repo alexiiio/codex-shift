@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import readline from 'node:readline';
-import { getCurrentProfile, loginProfile, refreshAllProfiles, removeProfile, saveCurrentAs, switchTo, } from './accounts.js';
+import { getCurrentProfile, initializeWeeklyWindow, inspectWeeklyWindows, loginProfile, refreshAllProfiles, removeProfile, saveCurrentAs, switchTo, } from './accounts.js';
 const VERSION = '0.2.0';
 const ANSI = {
     altScreenOn: '\u001b[?1049h',
@@ -13,7 +13,7 @@ const ANSI = {
     green: '\u001b[32m',
 };
 function usage() {
-    console.log(`Codex Shift ${VERSION}\n\nCross-platform account switching for OpenAI Codex CLI.\n\nCommands:\n  login <name>      Login and save a new Codex account\n  save <name>       Save the currently logged-in Codex account\n  use <name>        Switch the default account\n  list              Refresh and list saved accounts\n  current           Show the current account\n  remove <name>     Remove a saved account\n  version           Show version\n`);
+    console.log(`Codex Shift ${VERSION}\n\nSwitch Codex accounts and start weekly usage windows with minimal quota.\n\nCommands:\n  login <name>      Login and save a new Codex account\n  save <name>       Save the currently logged-in Codex account\n  use <name>        Switch the default account\n  list              Refresh and list saved accounts\n  init-week         Start unused weekly windows with one minimal request\n  current           Show the current account\n  remove <name>     Remove a saved account\n  version           Show version\n`);
 }
 function requireName(args) {
     const name = args[0];
@@ -36,7 +36,10 @@ function formatPlan(plan) {
     };
     return aliases[plan] ?? plan;
 }
-function formatReset(timestamp) {
+function formatReset(profile) {
+    if (profile.meta?.weekStarted === false)
+        return 'Not started';
+    const timestamp = profile.meta?.weekReset;
     if (!timestamp)
         return '-';
     return new Intl.DateTimeFormat(undefined, {
@@ -52,7 +55,7 @@ function createRows(profiles) {
         account: profile.meta?.email ?? '-',
         plan: formatPlan(profile.meta?.plan),
         weekLeft: profile.meta?.weekLeft === undefined ? '-' : `${profile.meta.weekLeft}%`,
-        reset: formatReset(profile.meta?.weekReset),
+        reset: formatReset(profile),
     }));
 }
 function paint(enabled, style, text) {
@@ -105,6 +108,111 @@ function canUseInteractiveList() {
         && process.stdout.isTTY
         && process.env.TERM !== 'dumb'
         && typeof process.stdin.setRawMode === 'function');
+}
+async function confirmWeeklyInitialization(profiles) {
+    if (!canUseInteractiveList())
+        return false;
+    const stdin = process.stdin;
+    const stdout = process.stdout;
+    const wasRaw = stdin.isRaw;
+    const useAltScreen = !process.env.CI;
+    let selectedIndex = 0;
+    let settled = false;
+    const render = () => {
+        const cancel = selectedIndex === 0 ? paint(true, `${ANSI.bold}${ANSI.cyan}`, '› Cancel') : '  Cancel';
+        const confirm = selectedIndex === 1 ? paint(true, `${ANSI.bold}${ANSI.cyan}`, '› Confirm') : '  Confirm';
+        const body = [
+            paint(true, ANSI.bold, 'Codex Shift'),
+            paint(true, ANSI.dim, 'Initialize weekly usage windows'),
+            '',
+            formatProfileTable(profiles, undefined, true),
+            '',
+            'One minimal Codex request will be sent for each account.',
+            paint(true, ANSI.dim, 'This consumes quota. Failed requests are not retried.'),
+            '',
+            cancel,
+            confirm,
+            '',
+            formatHelp([['↑/↓', 'Move'], ['Enter', 'Select'], ['Esc', 'Cancel']]),
+        ].join('\n');
+        stdout.write(`${ANSI.clear}${body}\n`);
+    };
+    return await new Promise((resolve) => {
+        const cleanup = () => {
+            if (settled)
+                return;
+            settled = true;
+            stdin.removeListener('keypress', onKeypress);
+            process.removeListener('SIGINT', cancel);
+            stdout.removeListener('resize', render);
+            stdin.setRawMode(wasRaw);
+            stdin.pause();
+            stdout.write(`${ANSI.reset}${useAltScreen ? ANSI.altScreenOff : ''}`);
+        };
+        const finish = (confirmed) => {
+            cleanup();
+            resolve(confirmed);
+        };
+        const cancel = () => finish(false);
+        const onKeypress = (_value, key) => {
+            if ((key.ctrl && key.name === 'c') || key.name === 'escape' || key.name === 'q') {
+                cancel();
+            }
+            else if (key.name === 'up' || key.name === 'down') {
+                selectedIndex = selectedIndex === 0 ? 1 : 0;
+                render();
+            }
+            else if (key.name === 'return' || key.name === 'enter') {
+                finish(selectedIndex === 1);
+            }
+        };
+        readline.emitKeypressEvents(stdin);
+        if (useAltScreen)
+            stdout.write(ANSI.altScreenOn);
+        stdin.setRawMode(true);
+        stdin.resume();
+        stdin.on('keypress', onKeypress);
+        process.on('SIGINT', cancel);
+        stdout.on('resize', render);
+        render();
+    });
+}
+async function initializeUnusedWeeklyWindows() {
+    console.log('Checking weekly usage windows...');
+    const inspection = await inspectWeeklyWindows();
+    if (inspection.profiles.length === 0) {
+        console.log('No saved accounts.');
+        return;
+    }
+    if (inspection.targets.length === 0) {
+        console.log('No accounts were confirmed as having an unstarted weekly window.');
+        if (inspection.unknown.length > 0) {
+            console.log(`${inspection.unknown.length} account(s) could not be determined and were not used.`);
+        }
+        return;
+    }
+    if (inspection.unknown.length > 0) {
+        console.log(`${inspection.unknown.length} account(s) could not be determined and will be skipped.`);
+    }
+    if (!(await confirmWeeklyInitialization(inspection.targets))) {
+        console.log('Cancelled. No quota was used.');
+        return;
+    }
+    let failed = 0;
+    for (const profile of inspection.targets) {
+        process.stdout.write(`Starting '${profile.name}'... `);
+        try {
+            const meta = await initializeWeeklyWindow(profile.name);
+            const updated = { ...profile, meta };
+            console.log(`✓ ${formatReset(updated)}`);
+        }
+        catch (error) {
+            failed += 1;
+            console.log(`failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }
+    if (failed > 0)
+        process.exitCode = 1;
 }
 async function showInteractiveList(initialProfiles) {
     let profiles = initialProfiles;
@@ -296,6 +404,9 @@ async function main() {
                 else
                     printProfiles(profiles);
             }
+            break;
+        case 'init-week':
+            await initializeUnusedWeeklyWindows();
             break;
         case 'current':
             console.log((await getCurrentProfile()) ?? 'not set');
