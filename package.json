@@ -22,7 +22,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
-    "test": "npm run build && node --test test/*.test.mjs",
+    "test": "npm run build && node --test test/account-safety.test.mjs test/core.test.mjs",
     "prepublishOnly": "npm run check && npm test",
     "start": "node dist/cli.js"
   },
