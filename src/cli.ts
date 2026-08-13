@@ -5,14 +5,17 @@ import {
   initializeWeeklyWindow,
   inspectWeeklyWindows,
   loginProfile,
+  mapWithConcurrency,
+  planWeeklyInitialization,
   refreshAllProfiles,
+  recoverAccountState,
   removeProfile,
   saveCurrentAs,
   switchTo,
 } from './accounts.js';
-import type { AccountProfile } from './types.js';
+import type { AccountProfile, WeeklyInitPlan } from './types.js';
 
-const VERSION = '0.2.0';
+const VERSION = '0.2.1';
 
 const ANSI = {
   altScreenOn: '\u001b[?1049h',
@@ -23,6 +26,7 @@ const ANSI = {
   dim: '\u001b[2m',
   cyan: '\u001b[36m',
   green: '\u001b[32m',
+  yellow: '\u001b[33m',
 };
 
 interface ProfileRow {
@@ -31,10 +35,11 @@ interface ProfileRow {
   plan: string;
   weekLeft: string;
   reset: string;
+  source: string;
 }
 
 function usage(): void {
-  console.log(`Codex Shift ${VERSION}\n\nSwitch Codex accounts and start weekly usage windows with minimal quota.\n\nCommands:\n  login <name>      Login and save a new Codex account\n  save <name>       Save the currently logged-in Codex account\n  use <name>        Switch the default account\n  list              Refresh and list saved accounts\n  init-week         Start unused weekly windows with one minimal request\n  current           Show the current account\n  remove <name>     Remove a saved account\n  version           Show version\n`);
+  console.log(`Codex Shift ${VERSION}\n\nSwitch Codex accounts and start weekly usage windows with minimal quota.\n\nCommands:\n  login <name>          Login and save a new Codex account\n  save <name>           Save the currently logged-in Codex account\n  use <name>            Switch the default account\n  list                  Refresh and list saved accounts\n  init-week [--dry-run] Review or start unused weekly windows\n  current               Show the current account\n  remove <name>         Remove a saved account\n  version               Show version\n`);
 }
 
 function requireName(args: string[]): string {
@@ -77,6 +82,11 @@ function createRows(profiles: AccountProfile[]): ProfileRow[] {
     plan: formatPlan(profile.meta?.plan),
     weekLeft: profile.meta?.weekLeft === undefined ? '-' : `${profile.meta.weekLeft}%`,
     reset: formatReset(profile),
+    source: profile.dataSource === 'live'
+      ? 'LIVE'
+      : profile.dataSource === 'cached'
+        ? 'CACHED'
+        : 'UNAVAILABLE',
   }));
 }
 
@@ -98,6 +108,7 @@ function formatProfileTable(profiles: AccountProfile[], selectedIndex?: number, 
   const planWidth = Math.max('PLAN'.length, ...rows.map((row) => row.plan.length));
   const weekLeftWidth = Math.max('WEEK LEFT'.length, ...rows.map((row) => row.weekLeft.length));
   const resetWidth = Math.max('RESET TIME'.length, ...rows.map((row) => row.reset.length));
+  const sourceWidth = Math.max('SOURCE'.length, ...rows.map((row) => row.source.length));
 
   const header = [
     'NAME'.padEnd(nameWidth),
@@ -105,6 +116,7 @@ function formatProfileTable(profiles: AccountProfile[], selectedIndex?: number, 
     'PLAN'.padEnd(planWidth),
     'WEEK LEFT'.padEnd(weekLeftWidth),
     'RESET TIME'.padEnd(resetWidth),
+    'SOURCE'.padEnd(sourceWidth),
   ].join('  ');
 
   const lines = [`    ${paint(color, ANSI.dim, header)}`];
@@ -116,6 +128,7 @@ function formatProfileTable(profiles: AccountProfile[], selectedIndex?: number, 
       row.plan.padEnd(planWidth),
       row.weekLeft.padEnd(weekLeftWidth),
       row.reset.padEnd(resetWidth),
+      profileSource(profiles[index], row.source.padEnd(sourceWidth), color),
     ].join('  ');
 
     const cursor = selected ? paint(color, `${ANSI.bold}${ANSI.cyan}`, '›') : ' ';
@@ -124,6 +137,12 @@ function formatProfileTable(profiles: AccountProfile[], selectedIndex?: number, 
   });
 
   return lines.join('\n');
+}
+
+function profileSource(profile: AccountProfile, text: string, color: boolean): string {
+  if (profile.dataSource === 'live') return paint(color, ANSI.green, text);
+  if (profile.dataSource === 'cached') return paint(color, ANSI.yellow, text);
+  return paint(color, ANSI.dim, text);
 }
 
 function printProfiles(profiles: AccountProfile[]): void {
@@ -144,37 +163,87 @@ function canUseInteractiveList(): boolean {
   );
 }
 
-async function confirmWeeklyInitialization(profiles: AccountProfile[]): Promise<boolean> {
-  if (!canUseInteractiveList()) return false;
+function formatModel(plan: WeeklyInitPlan): string {
+  return plan.model ?? 'Codex default';
+}
+
+function accountCount(count: number): string {
+  return `${count} ${count === 1 ? 'account' : 'accounts'}`;
+}
+
+function formatWeeklyPlanTable(
+  plans: WeeklyInitPlan[],
+  checked?: Set<string>,
+  selectedIndex?: number,
+  color = false,
+): string {
+  const nameWidth = Math.max('NAME'.length, ...plans.map((plan) => plan.name.length));
+  const accountWidth = Math.max('ACCOUNT'.length, ...plans.map((plan) => (plan.account ?? '-').length));
+  const modelWidth = Math.max('MODEL'.length, ...plans.map((plan) => formatModel(plan).length));
+  const reasoningWidth = Math.max('REASONING'.length, ...plans.map((plan) => plan.reasoningEffort.length));
+  const header = `     ${'NAME'.padEnd(nameWidth)}  ${'ACCOUNT'.padEnd(accountWidth)}  ${'MODEL'.padEnd(modelWidth)}  ${'REASONING'.padEnd(reasoningWidth)}`;
+  const lines = [paint(color, ANSI.dim, header)];
+  plans.forEach((plan, index) => {
+    const selected = selectedIndex === index;
+    const cursor = selected ? paint(color, `${ANSI.bold}${ANSI.cyan}`, '›') : ' ';
+    const mark = checked ? (checked.has(plan.name) ? '[✓]' : '[ ]') : '   ';
+    const row = `${mark}  ${plan.name.padEnd(nameWidth)}  ${(plan.account ?? '-').padEnd(accountWidth)}  ${formatModel(plan).padEnd(modelWidth)}  ${plan.reasoningEffort.padEnd(reasoningWidth)}`;
+    lines.push(`${cursor} ${selected ? paint(color, `${ANSI.bold}${ANSI.cyan}`, row) : row}`);
+  });
+  return lines.join('\n');
+}
+
+function printWeeklyPlans(plans: WeeklyInitPlan[]): void {
+  console.log(formatWeeklyPlanTable(plans));
+  console.log('\nDry run only. No model requests were sent and no quota was used.');
+}
+
+async function selectWeeklyInitializations(plans: WeeklyInitPlan[]): Promise<WeeklyInitPlan[] | null> {
+  if (!canUseInteractiveList()) return null;
 
   const stdin = process.stdin;
   const stdout = process.stdout;
   const wasRaw = stdin.isRaw;
   const useAltScreen = !process.env.CI;
   let selectedIndex = 0;
+  let confirmIndex = 0;
+  let mode: 'select' | 'confirm' = 'select';
+  const checked = new Set(plans.map((plan) => plan.name));
   let settled = false;
 
   const render = (): void => {
-    const cancel = selectedIndex === 0 ? paint(true, `${ANSI.bold}${ANSI.cyan}`, '› Cancel') : '  Cancel';
-    const confirm = selectedIndex === 1 ? paint(true, `${ANSI.bold}${ANSI.cyan}`, '› Confirm') : '  Confirm';
+    const selectedPlans = plans.filter((plan) => checked.has(plan.name));
     const body = [
       paint(true, ANSI.bold, 'Codex Shift'),
-      paint(true, ANSI.dim, 'Initialize weekly usage windows'),
+      paint(true, ANSI.dim, mode === 'select' ? 'Select weekly windows to initialize' : 'Confirm weekly initialization'),
       '',
-      formatProfileTable(profiles, undefined, true),
-      '',
-      'One minimal Codex request will be sent for each account.',
-      paint(true, ANSI.dim, 'This consumes quota. Failed requests are not retried.'),
-      '',
-      cancel,
-      confirm,
-      '',
-      formatHelp([['↑/↓', 'Move'], ['Enter', 'Select'], ['Esc', 'Cancel']]),
-    ].join('\n');
+      formatWeeklyPlanTable(mode === 'select' ? plans : selectedPlans, mode === 'select' ? checked : undefined, mode === 'select' ? selectedIndex : undefined, true),
+    ];
+    if (mode === 'select') {
+      body.push(
+        '',
+        paint(true, ANSI.dim, `${selectedPlans.length} of ${plans.length} accounts selected · Model choices are frozen for this run.`),
+        '',
+        formatHelp([['↑/↓', 'Move'], ['Space', 'Toggle'], ['A', 'All/none'], ['Enter', 'Continue'], ['Q', 'Quit']]),
+      );
+    } else {
+      const cancel = confirmIndex === 0 ? paint(true, `${ANSI.bold}${ANSI.cyan}`, '› Cancel') : '  Cancel';
+      const confirm = confirmIndex === 1 ? paint(true, `${ANSI.bold}${ANSI.cyan}`, '› Confirm and use quota') : '  Confirm and use quota';
+      body.push(
+        '',
+        'One minimal Codex request will be sent for each selected account.',
+        paint(true, ANSI.dim, 'This consumes quota. Each account is re-checked before execution.'),
+        '',
+        cancel,
+        confirm,
+        '',
+        formatHelp([['↑/↓', 'Move'], ['Enter', 'Select'], ['Esc', 'Back']]),
+      );
+    }
     stdout.write(`${ANSI.clear}${body}\n`);
   };
 
-  return await new Promise<boolean>((resolve) => {
+  return await new Promise<WeeklyInitPlan[] | null>((resolve) => {
     const cleanup = (): void => {
       if (settled) return;
       settled = true;
@@ -186,20 +255,48 @@ async function confirmWeeklyInitialization(profiles: AccountProfile[]): Promise<
       stdout.write(`${ANSI.reset}${useAltScreen ? ANSI.altScreenOff : ''}`);
     };
 
-    const finish = (confirmed: boolean): void => {
+    const finish = (selection: WeeklyInitPlan[] | null): void => {
       cleanup();
-      resolve(confirmed);
+      resolve(selection);
     };
-    const cancel = (): void => finish(false);
+    const cancel = (): void => finish(null);
     const onKeypress = (_value: string, key: readline.Key): void => {
-      if ((key.ctrl && key.name === 'c') || key.name === 'escape' || key.name === 'q') {
+      if ((key.ctrl && key.name === 'c') || key.name === 'q') {
         cancel();
-      } else if (key.name === 'up' || key.name === 'down') {
-        selectedIndex = selectedIndex === 0 ? 1 : 0;
-        render();
-      } else if (key.name === 'return' || key.name === 'enter') {
-        finish(selectedIndex === 1);
+        return;
       }
+      if (mode === 'confirm') {
+        if (key.name === 'escape' || key.name === 'n') {
+          mode = 'select';
+        } else if (key.name === 'up' || key.name === 'down') {
+          confirmIndex = confirmIndex === 0 ? 1 : 0;
+        } else if (key.name === 'y') {
+          confirmIndex = 1;
+        } else if (key.name === 'return' || key.name === 'enter') {
+          finish(confirmIndex === 1 ? plans.filter((plan) => checked.has(plan.name)) : null);
+          return;
+        }
+        render();
+        return;
+      }
+      if (key.name === 'escape') {
+        cancel();
+      } else if (key.name === 'up') {
+        selectedIndex = (selectedIndex - 1 + plans.length) % plans.length;
+      } else if (key.name === 'down') {
+        selectedIndex = (selectedIndex + 1) % plans.length;
+      } else if (key.name === 'space') {
+        const name = plans[selectedIndex].name;
+        if (checked.has(name)) checked.delete(name);
+        else checked.add(name);
+      } else if (key.name === 'a') {
+        if (checked.size === plans.length) checked.clear();
+        else plans.forEach((plan) => checked.add(plan.name));
+      } else if ((key.name === 'return' || key.name === 'enter') && checked.size > 0) {
+        mode = 'confirm';
+        confirmIndex = 0;
+      }
+      render();
     };
 
     readline.emitKeypressEvents(stdin);
@@ -213,8 +310,10 @@ async function confirmWeeklyInitialization(profiles: AccountProfile[]): Promise<
   });
 }
 
-async function initializeUnusedWeeklyWindows(): Promise<void> {
-  console.log('Checking weekly usage windows...');
+async function initializeUnusedWeeklyWindows(args: string[]): Promise<void> {
+  const dryRun = args.length === 1 && args[0] === '--dry-run';
+  if (args.length > (dryRun ? 1 : 0)) throw new Error('Usage: codex-shift init-week [--dry-run]');
+  console.log('Checking weekly usage windows (no quota is used during this check)...');
   const inspection = await inspectWeeklyWindows();
 
   if (inspection.profiles.length === 0) {
@@ -222,9 +321,27 @@ async function initializeUnusedWeeklyWindows(): Promise<void> {
     return;
   }
   if (inspection.targets.length === 0) {
-    console.log('No accounts were confirmed as having an unstarted weekly window.');
-    if (inspection.unknown.length > 0) {
-      console.log(`${inspection.unknown.length} account(s) could not be determined and were not used.`);
+    const color = canUseInteractiveList();
+    if (inspection.unknown.length === 0) {
+      console.log(paint(color, `${ANSI.bold}${ANSI.green}`, '✓ All weekly usage windows are active.'));
+      console.log(paint(
+        color,
+        ANSI.dim,
+        `  Checked ${accountCount(inspection.profiles.length)} · Everything is ready. No action needed.`,
+      ));
+    } else {
+      const activeCount = inspection.profiles.length - inspection.unknown.length;
+      console.log(paint(
+        color,
+        `${ANSI.bold}${ANSI.yellow}`,
+        '⚠ No unstarted weekly usage windows were found.',
+      ));
+      console.log(paint(
+        color,
+        ANSI.dim,
+        `  ${accountCount(activeCount)} ${activeCount === 1 ? 'is' : 'are'} active · `
+          + `${accountCount(inspection.unknown.length)} could not be checked · No requests were sent.`,
+      ));
     }
     return;
   }
@@ -233,17 +350,30 @@ async function initializeUnusedWeeklyWindows(): Promise<void> {
     console.log(`${inspection.unknown.length} account(s) could not be determined and will be skipped.`);
   }
 
-  if (!(await confirmWeeklyInitialization(inspection.targets))) {
+  if (!dryRun && !canUseInteractiveList()) {
+    console.log('An interactive terminal is required. Cancelled; no quota was used.');
+    return;
+  }
+
+  console.log('Resolving the model and reasoning effort for each eligible account...');
+  const plans = await mapWithConcurrency(inspection.targets, 4, planWeeklyInitialization);
+  if (dryRun) {
+    printWeeklyPlans(plans);
+    return;
+  }
+
+  const selectedPlans = await selectWeeklyInitializations(plans);
+  if (!selectedPlans) {
     console.log('Cancelled. No quota was used.');
     return;
   }
 
   let failed = 0;
-  for (const profile of inspection.targets) {
-    process.stdout.write(`Starting '${profile.name}'... `);
+  for (const plan of selectedPlans) {
+    process.stdout.write(`Starting '${plan.name}' (${formatModel(plan)}, ${plan.reasoningEffort})... `);
     try {
-      const meta = await initializeWeeklyWindow(profile.name);
-      const updated = { ...profile, meta };
+      const meta = await initializeWeeklyWindow(plan);
+      const updated = { name: plan.name, isCurrent: false, meta };
       console.log(`✓ ${formatReset(updated)}`);
     } catch (error) {
       failed += 1;
@@ -434,6 +564,7 @@ async function main(): Promise<void> {
       break;
     }
     case 'list':
+      await recoverAccountState();
       console.log('Refreshing account information...');
       {
         const profiles = await refreshAllProfiles();
@@ -442,9 +573,10 @@ async function main(): Promise<void> {
       }
       break;
     case 'init-week':
-      await initializeUnusedWeeklyWindows();
+      await initializeUnusedWeeklyWindows(args);
       break;
     case 'current':
+      await recoverAccountState();
       console.log((await getCurrentProfile()) ?? 'not set');
       break;
     case 'remove':

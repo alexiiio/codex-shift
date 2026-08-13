@@ -1,6 +1,6 @@
 {
   "name": "codex-shift",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Switch OpenAI Codex CLI accounts and start weekly usage windows with minimal quota.",
   "homepage": "https://github.com/alexiiio/codex-shift#readme",
   "repository": {
@@ -22,7 +22,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
-    "prepublishOnly": "npm run check && npm run build",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "prepublishOnly": "npm run check && npm test",
     "start": "node dist/cli.js"
   },
   "engines": {

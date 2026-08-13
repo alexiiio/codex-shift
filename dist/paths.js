@@ -5,6 +5,9 @@ export const codexHome = process.env.CODEX_HOME || path.join(homeDir, '.codex');
 export const accountsDir = path.join(homeDir, '.codex-accounts');
 export const currentAuthPath = path.join(codexHome, 'auth.json');
 export const currentProfilePath = path.join(accountsDir, '.current');
+export const accountsLockPath = path.join(accountsDir, '.lock');
+export const pendingProfilePath = path.join(accountsDir, '.pending-current');
+export const pendingAuthPath = path.join(accountsDir, '.pending-auth.json');
 export function profileDir(name) {
     return path.join(accountsDir, name);
 }

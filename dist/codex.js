@@ -3,11 +3,13 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
-import { codexHome, currentAuthPath } from './paths.js';
+import { codexHome } from './paths.js';
+import { readAuthIdentity } from './auth.js';
 const WEEKLY_PROBE_DELAY_MS = 2_000;
 const WEEKLY_ROLLING_TOLERANCE_SECONDS = 3;
 const MINIMAL_USAGE_PROMPT = 'Reply with OK only. Do not inspect files or use tools.';
 const DEFAULT_MINIMAL_REASONING_EFFORT = 'low';
+const SAFE_CLI_VALUE = /^[a-zA-Z0-9._-]+$/;
 // Keep this local ranking in sync with OpenAI's published Codex credit rate card.
 // Runtime selection never fetches a pricing page; it only lists models available to the account.
 const KNOWN_MODEL_INPUT_CREDITS = new Map([
@@ -35,35 +37,26 @@ export function ensureCodexInstalled() {
 }
 export async function loginWithCodex() {
     ensureCodexInstalled();
-    const backupDir = await fs.mkdtemp(path.join(os.tmpdir(), 'codex-shift-login-'));
-    const backupAuth = path.join(backupDir, 'auth.json');
-    let hadAuth = false;
+    const tempHome = await fs.mkdtemp(path.join(os.tmpdir(), 'codex-shift-login-'));
+    const tempAuth = path.join(tempHome, 'auth.json');
     try {
-        try {
-            await fs.copyFile(currentAuthPath, backupAuth);
-            hadAuth = true;
-        }
-        catch {
-            // No previous auth file is fine.
-        }
-        await fs.rm(currentAuthPath, { force: true });
         await new Promise((resolve, reject) => {
             const child = spawn('codex', ['login'], {
+                env: { ...process.env, CODEX_HOME: tempHome },
                 stdio: 'inherit',
                 shell: process.platform === 'win32',
             });
             child.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`codex login exited with code ${code}`))));
             child.on('error', reject);
         });
-        await fs.access(currentAuthPath);
-    }
-    catch (error) {
-        if (hadAuth)
-            await fs.copyFile(backupAuth, currentAuthPath);
-        throw error;
+        const auth = await fs.readFile(tempAuth);
+        if (!readAuthIdentity(auth)) {
+            throw new Error('Codex login completed, but the returned account identity could not be verified.');
+        }
+        return auth;
     }
     finally {
-        await fs.rm(backupDir, { recursive: true, force: true });
+        await fs.rm(tempHome, { recursive: true, force: true });
     }
 }
 function readWeeklyStatus(account, limitsMessage) {
@@ -128,6 +121,20 @@ async function withAppServer(tempHome, action) {
     const rl = readline.createInterface({ input: child.stdout });
     const pending = new Map();
     let nextRequestId = 1;
+    let processError;
+    const rejectPending = (error) => {
+        processError = error;
+        for (const waiter of pending.values()) {
+            clearTimeout(waiter.timer);
+            waiter.reject(error);
+        }
+        pending.clear();
+    };
+    child.on('error', (error) => rejectPending(error));
+    child.stdin.on('error', (error) => rejectPending(error));
+    child.on('exit', (code, signal) => {
+        rejectPending(new Error(`Codex app-server exited before completing the request (${signal ?? code ?? 'unknown'}).`));
+    });
     rl.on('line', (line) => {
         let message;
         try {
@@ -149,6 +156,8 @@ async function withAppServer(tempHome, action) {
             waiter.resolve(message);
     });
     const request = (method, params) => {
+        if (processError)
+            return Promise.reject(processError);
         const id = nextRequestId;
         nextRequestId += 1;
         return new Promise((resolve, reject) => {
@@ -157,12 +166,18 @@ async function withAppServer(tempHome, action) {
                 reject(new Error(`Timed out waiting for ${method}.`));
             }, 15_000);
             pending.set(id, { resolve, reject, timer });
-            child.stdin.write(`${JSON.stringify({ method, id, ...(params ? { params } : {}) })}\n`);
+            child.stdin.write(`${JSON.stringify({ method, id, ...(params ? { params } : {}) })}\n`, (error) => {
+                if (!error)
+                    return;
+                clearTimeout(timer);
+                pending.delete(id);
+                reject(error);
+            });
         });
     };
     try {
         await request('initialize', {
-            clientInfo: { name: 'codex-shift', title: 'Codex Shift', version: '0.2.0' },
+            clientInfo: { name: 'codex-shift', title: 'Codex Shift', version: '0.2.1' },
         });
         child.stdin.write(`${JSON.stringify({ method: 'initialized' })}\n`);
         return await action(request);
@@ -193,7 +208,7 @@ function selectLowestReasoningEffort(model) {
         ?? model?.defaultReasoningEffort
         ?? DEFAULT_MINIMAL_REASONING_EFFORT;
 }
-function selectMinimalModel(models) {
+export function selectMinimalModel(models) {
     const visibleModels = models.filter((model) => model.hidden !== true && typeof model.model === 'string');
     const pricedModels = visibleModels
         .filter((model) => KNOWN_MODEL_INPUT_CREDITS.has(model.model))
@@ -203,6 +218,7 @@ function selectMinimalModel(models) {
     return {
         model: selected?.model,
         reasoningEffort: selectLowestReasoningEffort(selected),
+        modelSource: pricedModels[0] ? 'known-ranked' : selected ? 'account-default' : 'cli-default',
     };
 }
 async function queryMinimalModel(tempHome) {
@@ -231,7 +247,20 @@ async function queryMinimalModel(tempHome) {
     }
     catch {
         // Older Codex versions may not expose model/list. Omitting --model uses their default.
-        return { reasoningEffort: DEFAULT_MINIMAL_REASONING_EFFORT };
+        return {
+            reasoningEffort: DEFAULT_MINIMAL_REASONING_EFFORT,
+            modelSource: 'cli-default',
+        };
+    }
+}
+export async function planWeeklyWindowFromAuth(authPath) {
+    const tempHome = await fs.mkdtemp(path.join(os.tmpdir(), 'codex-shift-model-'));
+    try {
+        await fs.copyFile(authPath, path.join(tempHome, 'auth.json'));
+        return await queryMinimalModel(tempHome);
+    }
+    finally {
+        await fs.rm(tempHome, { recursive: true, force: true });
     }
 }
 export async function queryAccountFromAuth(authPath) {
@@ -261,14 +290,19 @@ async function queryAccount(authPath) {
         await fs.rm(tempHome, { recursive: true, force: true });
     }
 }
-export async function triggerWeeklyWindowFromAuth(authPath) {
+export async function triggerWeeklyWindowFromAuth(authPath, selection) {
     ensureCodexInstalled();
     const tempHome = await fs.mkdtemp(path.join(os.tmpdir(), 'codex-shift-init-home-'));
     const tempWorkDir = await fs.mkdtemp(path.join(os.tmpdir(), 'codex-shift-init-work-'));
     const tempAuthPath = path.join(tempHome, 'auth.json');
     try {
         await fs.copyFile(authPath, tempAuthPath);
-        const selection = await queryMinimalModel(tempHome);
+        if (selection.model && !SAFE_CLI_VALUE.test(selection.model)) {
+            throw new Error('Codex returned an unsafe model identifier.');
+        }
+        if (!SAFE_CLI_VALUE.test(selection.reasoningEffort)) {
+            throw new Error('Codex returned an unsafe reasoning-effort value.');
+        }
         await new Promise((resolve, reject) => {
             const child = spawn('codex', [
                 'exec',
@@ -320,10 +354,7 @@ export async function triggerWeeklyWindowFromAuth(authPath) {
                     reject(new Error(stderr.trim() || `Minimal Codex request exited with code ${code}.`));
             });
         });
-        // Preserve refreshed tokens without replacing the account used by current Codex processes.
-        await fs.copyFile(tempAuthPath, authPath);
-        if (process.platform !== 'win32')
-            await fs.chmod(authPath, 0o600);
+        return await fs.readFile(tempAuthPath);
     }
     finally {
         await fs.rm(tempHome, { recursive: true, force: true });

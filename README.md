@@ -58,7 +58,7 @@ View account information and switch profiles interactively:
 codex-shift list
 ```
 
-The list refreshes each profile's account, plan, weekly usage, and reset time. Use the arrow keys to choose an account, press Enter, and confirm the switch. The `*` marker identifies the account Codex is currently using.
+The list refreshes each profile's account, plan, weekly usage, and reset time. `LIVE`, `CACHED`, and `UNAVAILABLE` identify the source of each row. Use the arrow keys to choose an account, press Enter, and confirm the switch. The `*` marker identifies the account Codex is currently using.
 
 Start weekly usage windows that have not begun yet:
 
@@ -67,6 +67,12 @@ codex-shift init-week
 ```
 
 Codex Shift detects eligible accounts and asks for confirmation before sending one minimal request per account. No quota is consumed if you cancel. The request is deliberately kept much smaller than a normal coding task: it asks only for `OK`, uses no project context or persistent history, and selects the lowest-cost available model and reasoning effort. See [Start unused weekly windows](#start-unused-weekly-windows) for details.
+
+Preview eligible accounts and the exact model plan without sending a model request:
+
+```bash
+codex-shift init-week --dry-run
+```
 
 You can also switch directly by profile name, then continue using Codex normally:
 
@@ -83,7 +89,8 @@ codex
 | `codex-shift save <name>` | Save the account Codex is currently using |
 | `codex-shift use <name>` | Switch to a saved profile |
 | `codex-shift list` | Refresh profiles and interactively select an account to switch to |
-| `codex-shift init-week` | Start weekly windows that have not begun yet with one minimal Codex request |
+| `codex-shift init-week` | Select accounts and start unstarted weekly windows with one minimal request each |
+| `codex-shift init-week --dry-run` | Show eligible accounts, models, and reasoning efforts without using quota |
 | `codex-shift current` | Show the current profile |
 | `codex-shift remove <name>` | Remove a profile that is not current |
 | `codex-shift --help` | Show command help |
@@ -92,9 +99,9 @@ Profile names may contain letters, numbers, dots, underscores, and hyphens.
 
 ## Account information
 
-`codex-shift list` refreshes the available account and weekly usage information for each saved profile. It performs each check in a temporary `CODEX_HOME`, so refreshing another account does not replace the active `~/.codex/auth.json`.
+`codex-shift list` refreshes the available account and weekly usage information for saved profiles with bounded parallel queries. Each check runs in a temporary `CODEX_HOME`, so refreshing another account does not replace the active `~/.codex/auth.json`.
 
-The account table can show the email, plan, weekly usage remaining, and reset time. Reset times use the local timezone of the machine running Codex Shift. When an unused weekly window returns a reset time that advances with each lookup, Codex Shift displays `Not started` instead of the moving time. If a live lookup fails for a profile, its previously cached metadata is displayed instead.
+The account table can show the email, plan, weekly usage remaining, reset time, and data source. `LIVE` means the current refresh succeeded, `CACHED` means the live lookup failed and saved metadata is being shown, and `UNAVAILABLE` means neither live nor cached data is available. Reset times use the local timezone of the machine running Codex Shift. When an unused weekly window returns a reset time that advances with each lookup, Codex Shift displays `Not started` instead of the moving time.
 
 In an interactive terminal, `>` marks the selected profile and `*` marks the current profile. Use the arrow keys to select a profile and press Enter to continue. Choose **Confirm switch** or **Cancel** in the confirmation step; Confirm switch is selected by default. Press `R` to refresh or `Q`/Esc to exit. When output is redirected or piped, `list` prints a non-interactive table and exits.
 
@@ -106,9 +113,11 @@ Some accounts do not start their weekly usage window until their first Codex req
 codex-shift init-week
 ```
 
-Codex Shift checks each profile twice without consuming quota and selects only accounts whose reset time is confirmed to be moving with the lookup time. It then shows the target accounts and asks for confirmation; **Cancel** is selected by default. Use the arrow keys and Enter to choose. After confirmation, it sends one short, read-only, ephemeral Codex request per target account, then refreshes the cached reset time. Failed requests are not retried automatically.
+Codex Shift checks each profile twice without consuming quota and selects only accounts whose reset time is confirmed by the current check to be moving with lookup time. Cached state is never enough to select an account for initialization. Use the arrow keys and Space to choose accounts individually, then review the frozen model and reasoning-effort plan. The final confirmation defaults to **Cancel**. Immediately before each request, the account is checked again under a process lock; an account that is no longer confirmed as unstarted is skipped without using quota. Failed requests are not retried automatically.
 
-Before each request, Codex Shift uses the account's model catalog to select the available model with the lowest cost in its bundled OpenAI rate-card ranking, preferring GPT-5.6 Luna, and uses the lowest reasoning effort that model supports. Pricing pages are not queried at runtime. If no available model has a known cost, Codex Shift uses the account's default model; if the model catalog is unavailable, the Codex CLI default is used.
+Use `codex-shift init-week --dry-run` to print the same eligibility and model plan without opening the selection UI or sending model requests.
+
+Before confirmation, Codex Shift uses each account's model catalog to select the available model with the lowest cost in its bundled OpenAI rate-card ranking, preferring GPT-5.6 Luna, and uses the lowest reasoning effort that model supports. The displayed choice is frozen and passed unchanged to the actual request. Pricing pages are not queried at runtime. If no available model has a known cost, Codex Shift displays and uses the account's default model; if the model catalog is unavailable, it displays `Codex default` and lets the Codex CLI resolve the model.
 
 Quota usage is intentionally minimized:
 
@@ -130,7 +139,9 @@ Credentials remain on the local machine. Saved profiles are stored under:
 ~/.codex-accounts/<profile>/auth.json
 ```
 
-On Windows, Codex Shift uses the equivalent path under the user home directory. Authentication tokens are not intentionally printed. Temporary directories created for account queries are removed after each query.
+On Windows, Codex Shift uses the equivalent path under the user home directory. Authentication tokens are not intentionally printed. Temporary directories created for account queries and login are removed afterward.
+
+Credential changes use atomic file replacement, an interrupted-switch recovery marker, and a cross-process lock. Before automatically saving refreshed active credentials back to the profile marked current, Codex Shift verifies that both credentials identify the same account. If Codex was logged into another account outside Codex Shift, switching stops instead of overwriting the saved profile; run `codex-shift save <name>` to explicitly save that active login. `codex-shift login` also runs in an isolated temporary `CODEX_HOME`, so an interrupted or failed login leaves the active credential file untouched.
 
 ## License
 

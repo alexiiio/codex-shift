@@ -30,22 +30,22 @@ Codex Shift 使用独立的 `codex-shift` 命令作为稳定公共接口，不�
 - `remove`
 - Codex app-server 结构化账号和 rate-limit 查询
 - macOS、Windows、Linux CI
-- 从源码安装脚本
+- npm 公共包分发
+- 跨进程文件锁、原子凭据写入与账号身份一致性保护
+- 核心账号安全、模型选择和并发行为自动化测试
 
 首个稳定版本前计划完成：
 
-- 为并发账号修改增加文件锁和并发保护
-- 增加自动化测试
-- 完善 npm 发布流程
+- 增加故障注入和真实终端交互测试
+- 完善自动化 npm 发布流程
 - 评估可选且无冲突的 `codex account ...` 兼容层
 
 ## 分发策略
 
 面向用户的安装方式按以下优先级维护：
 
-1. 发布到 npm registry 后，以 `npm install --global codex-shift` 作为首选方式。
-2. npm 正式发布前，使用 `npm install --global https://github.com/alexiiio/codex-shift/archive/refs/heads/main.tar.gz` 从 GitHub tarball 安装。
-3. 源码安装脚本作为需要检查或修改源码时的备用方式。
+1. 以 `npm install --global codex-shift` 作为面向用户的首选方式。
+2. GitHub tarball 和源码安装只用于维护、排障或发布前验证，不在公开 README 中推荐。
 
 Homebrew 官方仓库当前没有 Codex Shift formula。稳定发布并建立版本化归档后，可以选择维护独立 tap，或在符合要求时向 `homebrew-core` 提交 formula。
 
@@ -56,8 +56,8 @@ GitHub tarball 安装直接使用仓库中已构建的 `dist`，避免在 npm �
 ```bash
 npm install
 npm run check
-npm run build
+npm test
 node dist/cli.js --help
 ```
 
-GitHub Actions 在 macOS、Windows 和 Linux 上，分别使用 Node.js 20 和 22 进行检查和构建。交互式列表还应在真实 TTY 中验证方向键、二次确认、刷新、退出、Ctrl+C、窗口缩放，以及管道和重定向时的非交互降级。
+GitHub Actions 在 macOS、Windows 和 Linux 上，分别使用 Node.js 20 和 22 运行类型检查、构建和自动化测试。交互式列表与 `init-week` 还应在真实 TTY 中验证方向键、勾选、二次确认、刷新、退出、Ctrl+C、窗口缩放，以及管道和重定向时的非交互降级。
