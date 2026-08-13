@@ -38,6 +38,17 @@ async function runUse(paths) {
   });
 }
 
+async function runCli(paths, ...args) {
+  return await execFileAsync(process.execPath, [cliPath, ...args], {
+    env: {
+      ...process.env,
+      HOME: paths.home,
+      USERPROFILE: paths.home,
+      CODEX_HOME: paths.codexHome,
+    },
+  });
+}
+
 test('external login mismatch never overwrites the profile marked current', async () => {
   const paths = await fixture('external');
   const originalProfile = await fs.readFile(path.join(paths.accounts, 'personal', 'auth.json'), 'utf8');
@@ -65,6 +76,26 @@ test('same-account token refresh is saved before switching profiles', async () =
       'b',
     );
     assert.equal(await fs.readFile(path.join(paths.accounts, '.current'), 'utf8'), 'work\n');
+  } finally {
+    await fs.rm(paths.home, { recursive: true, force: true });
+  }
+});
+
+test('save commits the active login and current marker through the recoverable transaction', async () => {
+  const paths = await fixture('external');
+  try {
+    await runCli(paths, 'save', 'external');
+    assert.equal(
+      JSON.parse(await fs.readFile(path.join(paths.accounts, 'external', 'auth.json'), 'utf8')).tokens.account_id,
+      'external',
+    );
+    assert.equal(
+      JSON.parse(await fs.readFile(path.join(paths.codexHome, 'auth.json'), 'utf8')).tokens.account_id,
+      'external',
+    );
+    assert.equal(await fs.readFile(path.join(paths.accounts, '.current'), 'utf8'), 'external\n');
+    await assert.rejects(fs.access(path.join(paths.accounts, '.pending-current')));
+    await assert.rejects(fs.access(path.join(paths.accounts, '.pending-auth.json')));
   } finally {
     await fs.rm(paths.home, { recursive: true, force: true });
   }

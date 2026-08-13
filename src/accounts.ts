@@ -140,8 +140,7 @@ export async function saveCurrentAs(name: string): Promise<void> {
     if (!readAuthIdentity(auth)) {
       throw new Error('The active Codex account identity could not be verified; nothing was saved.');
     }
-    await atomicWriteFile(profileAuthPath(name), auth, 0o600);
-    await atomicWriteFile(currentProfilePath, `${name}\n`, 0o600);
+    await commitCurrentProfileUnlocked(name, auth);
   });
   await refreshProfileMeta(name).catch(() => undefined);
 }
@@ -387,7 +386,8 @@ export async function initializeWeeklyWindow(plan: WeeklyInitPlan): Promise<Acco
         // A native `codex login` may have happened while the selection UI was open; never replace it.
         activeLoginChanged = true;
       }
-      if (!activeLoginChanged) await commitCurrentProfileUnlocked(name, refreshedAuth);
+      if (activeLoginChanged) await atomicWriteFile(auth, refreshedAuth, 0o600);
+      else await commitCurrentProfileUnlocked(name, refreshedAuth);
     } else {
       await atomicWriteFile(auth, refreshedAuth, 0o600);
     }

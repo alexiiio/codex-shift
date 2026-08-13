@@ -68,12 +68,6 @@ codex-shift init-week
 
 Codex Shift detects eligible accounts and asks for confirmation before sending one minimal request per account. No quota is consumed if you cancel. The request is deliberately kept much smaller than a normal coding task: it asks only for `OK`, uses no project context or persistent history, and selects the lowest-cost available model and reasoning effort. See [Start unused weekly windows](#start-unused-weekly-windows) for details.
 
-Preview eligible accounts and the exact model plan without sending a model request:
-
-```bash
-codex-shift init-week --dry-run
-```
-
 You can also switch directly by profile name, then continue using Codex normally:
 
 ```bash
