@@ -45,6 +45,7 @@ async function runCli(paths, ...args) {
       HOME: paths.home,
       USERPROFILE: paths.home,
       CODEX_HOME: paths.codexHome,
+      ...paths.env,
     },
   });
 }
@@ -118,6 +119,126 @@ test('an interrupted switch repairs the current marker from the active identity'
     assert.equal(await fs.readFile(path.join(paths.accounts, '.current'), 'utf8'), 'work\n');
     await assert.rejects(fs.access(path.join(paths.accounts, '.pending-current')));
     await assert.rejects(fs.access(path.join(paths.accounts, '.pending-auth.json')));
+  } finally {
+    await fs.rm(paths.home, { recursive: true, force: true });
+  }
+});
+
+test('recovery preserves a staged credential without intent for older-version compatibility', async () => {
+  const paths = await fixture('a');
+  try {
+    const orphaned = auth('b', 'orphaned-b');
+    await fs.writeFile(path.join(paths.accounts, '.pending-auth.json'), orphaned);
+    await assert.rejects(runCli(paths, 'current'), /was preserved at/);
+    const recoveredName = (await fs.readdir(paths.accounts)).find((name) => name.startsWith('.pending-auth.json.recovered-'));
+    assert.ok(recoveredName);
+    assert.equal(await fs.readFile(path.join(paths.accounts, recoveredName), 'utf8'), orphaned);
+    const result = await runCli(paths, 'current');
+    assert.equal(result.stdout.trim(), 'personal');
+    assert.equal(await fs.readFile(path.join(paths.accounts, '.current'), 'utf8'), 'personal\n');
+    assert.equal(JSON.parse(await fs.readFile(path.join(paths.codexHome, 'auth.json'), 'utf8')).tokens.account_id, 'a');
+    await assert.rejects(fs.access(path.join(paths.accounts, '.pending-auth.json')));
+  } finally {
+    await fs.rm(paths.home, { recursive: true, force: true });
+  }
+});
+
+test('recovery preserves all state when the active account conflicts with an interrupted switch', async () => {
+  const paths = await fixture('external');
+  try {
+    const staged = auth('b', 'staged-b');
+    const originalPersonal = await fs.readFile(path.join(paths.accounts, 'personal', 'auth.json'), 'utf8');
+    const originalWork = await fs.readFile(path.join(paths.accounts, 'work', 'auth.json'), 'utf8');
+    const originalActive = await fs.readFile(path.join(paths.codexHome, 'auth.json'), 'utf8');
+    await fs.writeFile(path.join(paths.accounts, '.pending-auth.json'), staged);
+    await fs.writeFile(path.join(paths.accounts, '.pending-current'), 'work\n');
+
+    await assert.rejects(runCli(paths, 'current'), /could not be recovered safely/);
+    assert.equal(await fs.readFile(path.join(paths.accounts, 'personal', 'auth.json'), 'utf8'), originalPersonal);
+    assert.equal(await fs.readFile(path.join(paths.accounts, 'work', 'auth.json'), 'utf8'), originalWork);
+    assert.equal(await fs.readFile(path.join(paths.codexHome, 'auth.json'), 'utf8'), originalActive);
+    assert.equal(await fs.readFile(path.join(paths.accounts, '.pending-auth.json'), 'utf8'), staged);
+    assert.equal(await fs.readFile(path.join(paths.accounts, '.pending-current'), 'utf8'), 'work\n');
+  } finally {
+    await fs.rm(paths.home, { recursive: true, force: true });
+  }
+});
+
+test('recovery handles a lone transaction marker after the target became active', async () => {
+  const paths = await fixture('b');
+  try {
+    await fs.writeFile(path.join(paths.accounts, '.pending-current'), 'work\n');
+    const result = await runCli(paths, 'current');
+    assert.equal(result.stdout.trim(), 'work');
+    assert.equal(await fs.readFile(path.join(paths.accounts, '.current'), 'utf8'), 'work\n');
+    await assert.rejects(fs.access(path.join(paths.accounts, '.pending-current')));
+  } finally {
+    await fs.rm(paths.home, { recursive: true, force: true });
+  }
+});
+
+test('recovery preserves staged credentials when the active auth file disappeared', async () => {
+  const paths = await fixture('a');
+  try {
+    await fs.writeFile(path.join(paths.accounts, '.pending-auth.json'), auth('b', 'staged-b'));
+    await fs.writeFile(path.join(paths.accounts, '.pending-current'), 'work\n');
+    await fs.rm(path.join(paths.codexHome, 'auth.json'));
+    const result = await runCli(paths, 'current');
+    assert.equal(result.stdout.trim(), 'personal');
+    assert.equal(
+      JSON.parse(await fs.readFile(path.join(paths.accounts, 'work', 'auth.json'), 'utf8')).tokens.refresh_token,
+      'staged-b',
+    );
+    await assert.rejects(fs.access(path.join(paths.accounts, '.pending-current')));
+    await assert.rejects(fs.access(path.join(paths.accounts, '.pending-auth.json')));
+  } finally {
+    await fs.rm(paths.home, { recursive: true, force: true });
+  }
+});
+
+test('remove requires explicit non-interactive confirmation and reports missing profiles', async () => {
+  const paths = await fixture('a');
+  try {
+    await assert.rejects(runCli(paths, 'remove', 'work'), /Use --yes/);
+    await fs.access(path.join(paths.accounts, 'work', 'auth.json'));
+
+    await runCli(paths, 'remove', 'work', '--yes');
+    await assert.rejects(fs.access(path.join(paths.accounts, 'work')));
+    await assert.rejects(runCli(paths, 'remove', 'missing', '--yes'), /does not exist/);
+    await assert.rejects(runCli(paths, 'remove', 'personal', '--yes'), /Cannot remove the current profile/);
+  } finally {
+    await fs.rm(paths.home, { recursive: true, force: true });
+  }
+});
+
+test('commands reject extra arguments before performing side effects', async () => {
+  const paths = await fixture('a');
+  try {
+    await assert.rejects(runCli(paths, 'use', 'work', 'extra'), /Usage: codex-shift use <name>/);
+    await assert.rejects(runCli(paths, 'switch', 'work', 'extra'), /Usage: codex-shift switch <name>/);
+    assert.equal(await fs.readFile(path.join(paths.accounts, '.current'), 'utf8'), 'personal\n');
+    assert.equal(JSON.parse(await fs.readFile(path.join(paths.codexHome, 'auth.json'), 'utf8')).tokens.account_id, 'a');
+    await assert.rejects(runCli(paths, 'login', 'work', 'extra'), /Usage: codex-shift login <name>/);
+    await assert.rejects(runCli(paths, 'save', 'work', 'extra'), /Usage: codex-shift save <name>/);
+    await assert.rejects(runCli(paths, 'list', 'extra'), /Usage: codex-shift list/);
+    await assert.rejects(runCli(paths, 'current', 'extra'), /Usage: codex-shift current/);
+    await assert.rejects(runCli(paths, '--version', 'extra'), /Usage: codex-shift --version/);
+    await assert.rejects(runCli(paths, '--help', 'extra'), /Usage: codex-shift --help/);
+    await assert.rejects(runCli(paths, 'remove', 'work', '--yes', 'extra'), /Usage: codex-shift remove/);
+    await assert.rejects(runCli(paths, 'remove', 'work', '--yes', '--yes'), /Usage: codex-shift remove/);
+    await fs.access(path.join(paths.accounts, 'work', 'auth.json'));
+  } finally {
+    await fs.rm(paths.home, { recursive: true, force: true });
+  }
+});
+
+test('list exits non-zero when every live refresh fails', async () => {
+  const paths = await fixture('a');
+  try {
+    await assert.rejects(
+      runCli({ ...paths, env: { PATH: paths.home } }, 'list'),
+      /Account refresh failed for all profiles/,
+    );
   } finally {
     await fs.rm(paths.home, { recursive: true, force: true });
   }

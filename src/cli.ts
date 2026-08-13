@@ -15,7 +15,7 @@ import {
 } from './accounts.js';
 import type { AccountProfile, WeeklyInitPlan } from './types.js';
 
-const VERSION = '0.2.1';
+const VERSION = '0.2.2';
 
 const ANSI = {
   altScreenOn: '\u001b[?1049h',
@@ -39,13 +39,47 @@ interface ProfileRow {
 }
 
 function usage(): void {
-  console.log(`Codex Shift ${VERSION}\n\nSwitch Codex accounts and start weekly usage windows with minimal quota.\n\nCommands:\n  login <name>          Login and save a new Codex account\n  save <name>           Save the currently logged-in Codex account\n  use <name>            Switch the default account\n  list                  Refresh and list saved accounts\n  init-week [--dry-run] Review or start unused weekly windows\n  current               Show the current account\n  remove <name>         Remove a saved account\n  version               Show version\n`);
+  console.log(`Codex Shift ${VERSION}\n\nSwitch Codex accounts and start weekly usage windows with minimal quota.\n\nCommands:\n  login <name>               Login and save a new Codex account\n  save <name>                Save the currently logged-in Codex account\n  use <name>                 Switch the default account\n  list                       Refresh and list saved accounts\n  init-week [--dry-run]      Review or start unused weekly windows\n  current                    Show the current account\n  remove <name> [--yes]      Remove a saved account\n  version                    Show version\n`);
 }
 
-function requireName(args: string[]): string {
-  const name = args[0];
-  if (!name) throw new Error('Missing profile name.');
-  return name;
+function requireName(args: string[], command: string): string {
+  if (args.length !== 1) throw new Error(`Usage: codex-shift ${command} <name>`);
+  return args[0];
+}
+
+function requireNoArgs(args: string[], command: string): void {
+  if (args.length !== 0) throw new Error(`Usage: codex-shift ${command}`);
+}
+
+function parseRemoveArgs(args: string[]): { name: string; confirmed: boolean } {
+  if (args.length === 1) return { name: args[0], confirmed: false };
+  if (args.length === 2 && args[1] === '--yes') return { name: args[0], confirmed: true };
+  throw new Error('Usage: codex-shift remove <name> [--yes]');
+}
+
+async function confirmRemoval(name: string): Promise<boolean> {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    throw new Error('An interactive terminal is required. Use --yes to remove a profile non-interactively.');
+  }
+
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  return await new Promise<boolean>((resolve) => {
+    let settled = false;
+    const finish = (confirmed: boolean): void => {
+      if (settled) return;
+      settled = true;
+      rl.close();
+      resolve(confirmed);
+    };
+    rl.once('SIGINT', () => {
+      process.stdout.write('\n');
+      finish(false);
+    });
+    rl.once('close', () => finish(false));
+    rl.question(`Remove profile '${name}' and its locally stored credentials? [y/N] `, (answer) => {
+      finish(/^(y|yes)$/i.test(answer.trim()));
+    });
+  });
 }
 
 function formatPlan(plan?: string): string {
@@ -384,7 +418,7 @@ async function initializeUnusedWeeklyWindows(args: string[]): Promise<void> {
   if (failed > 0) process.exitCode = 1;
 }
 
-async function showInteractiveList(initialProfiles: AccountProfile[]): Promise<void> {
+async function showInteractiveList(initialProfiles: AccountProfile[]): Promise<AccountProfile[]> {
   let profiles = initialProfiles;
   let selectedIndex = Math.max(0, profiles.findIndex((profile) => profile.isCurrent));
   let mode: 'browse' | 'confirm' = 'browse';
@@ -426,7 +460,7 @@ async function showInteractiveList(initialProfiles: AccountProfile[]): Promise<v
     stdout.write(`${ANSI.clear}${body}\n`);
   };
 
-  return await new Promise<void>((resolve, reject) => {
+  return await new Promise<AccountProfile[]>((resolve, reject) => {
     const cleanup = (): void => {
       if (settled) return;
       settled = true;
@@ -440,7 +474,7 @@ async function showInteractiveList(initialProfiles: AccountProfile[]): Promise<v
 
     const finish = (): void => {
       cleanup();
-      resolve();
+      resolve(profiles);
     };
 
     const fail = (error: unknown): void => {
@@ -545,43 +579,53 @@ async function main(): Promise<void> {
 
   switch (command) {
     case 'login': {
-      const name = requireName(args);
+      const name = requireName(args, 'login');
       await loginProfile(name);
       console.log(`✓ Logged in, saved '${name}', and set it as current.`);
       break;
     }
     case 'save': {
-      const name = requireName(args);
+      const name = requireName(args, 'save');
       await saveCurrentAs(name);
       console.log(`✓ Saved '${name}' and set it as current.`);
       break;
     }
     case 'use':
     case 'switch': {
-      const name = requireName(args);
+      const name = requireName(args, command);
       await switchTo(name);
       console.log(`✓ Switched to '${name}'.`);
       break;
     }
     case 'list':
+      requireNoArgs(args, 'list');
       await recoverAccountState();
       console.log('Refreshing account information...');
       {
-        const profiles = await refreshAllProfiles();
-        if (profiles.length > 1 && canUseInteractiveList()) await showInteractiveList(profiles);
+        let profiles = await refreshAllProfiles();
+        if (profiles.length > 1 && canUseInteractiveList()) profiles = await showInteractiveList(profiles);
         else printProfiles(profiles);
+        if (profiles.length > 0 && !profiles.some((profile) => profile.dataSource === 'live')) {
+          console.error('Account refresh failed for all profiles; displayed data may be cached.');
+          process.exitCode = 1;
+        }
       }
       break;
     case 'init-week':
       await initializeUnusedWeeklyWindows(args);
       break;
     case 'current':
+      requireNoArgs(args, 'current');
       await recoverAccountState();
       console.log((await getCurrentProfile()) ?? 'not set');
       break;
     case 'remove':
     case 'rm': {
-      const name = requireName(args);
+      const { name, confirmed } = parseRemoveArgs(args);
+      if (!confirmed && !(await confirmRemoval(name))) {
+        console.log('Cancelled.');
+        break;
+      }
       await removeProfile(name);
       console.log(`✓ Removed '${name}'.`);
       break;
@@ -589,12 +633,14 @@ async function main(): Promise<void> {
     case 'version':
     case '--version':
     case '-v':
+      requireNoArgs(args, command);
       console.log(VERSION);
       break;
     case undefined:
     case 'help':
     case '--help':
     case '-h':
+      requireNoArgs(args, command ?? 'help');
       usage();
       break;
     default:

@@ -86,7 +86,7 @@ codex
 | `codex-shift init-week` | Select accounts and start unstarted weekly windows with one minimal request each |
 | `codex-shift init-week --dry-run` | Show eligible accounts, models, and reasoning efforts without using quota |
 | `codex-shift current` | Show the current profile |
-| `codex-shift remove <name>` | Remove a profile that is not current |
+| `codex-shift remove <name> [--yes]` | Remove a profile that is not current; `--yes` skips confirmation |
 | `codex-shift --help` | Show command help |
 
 Profile names may contain letters, numbers, dots, underscores, and hyphens.
@@ -98,6 +98,8 @@ Profile names may contain letters, numbers, dots, underscores, and hyphens.
 The account table can show the email, plan, weekly usage remaining, reset time, and data source. `LIVE` means the current refresh succeeded, `CACHED` means the live lookup failed and saved metadata is being shown, and `UNAVAILABLE` means neither live nor cached data is available. Reset times use the local timezone of the machine running Codex Shift. When an unused weekly window returns a reset time that advances with each lookup, Codex Shift displays `Not started` instead of the moving time.
 
 In an interactive terminal, `>` marks the selected profile and `*` marks the current profile. Use the arrow keys to select a profile and press Enter to continue. Choose **Confirm switch** or **Cancel** in the confirmation step; Confirm switch is selected by default. Press `R` to refresh or `Q`/Esc to exit. When output is redirected or piped, `list` prints a non-interactive table and exits.
+
+If every live refresh fails, cached or unavailable rows are still displayed, but `list` exits with status `1` so scripts can detect that no current data was retrieved.
 
 ### Start unused weekly windows
 
@@ -136,6 +138,8 @@ Credentials remain on the local machine. Saved profiles are stored under:
 On Windows, Codex Shift uses the equivalent path under the user home directory. Authentication tokens are not intentionally printed. Temporary directories created for account queries and login are removed afterward.
 
 Credential changes use atomic file replacement, an interrupted-switch recovery marker, and a cross-process lock. Before automatically saving refreshed active credentials back to the profile marked current, Codex Shift verifies that both credentials identify the same account. If Codex was logged into another account outside Codex Shift, switching stops instead of overwriting the saved profile; run `codex-shift save <name>` to explicitly save that active login. `codex-shift login` also runs in an isolated temporary `CODEX_HOME`, so an interrupted or failed login leaves the active credential file untouched.
+
+Removing a profile permanently deletes its locally stored credential and metadata. Interactive terminals ask for confirmation and default to cancel; scripts and redirected input must pass `--yes`. The current profile cannot be removed.
 
 ## License
 

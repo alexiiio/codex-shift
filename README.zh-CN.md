@@ -86,7 +86,7 @@ codex
 | `codex-shift init-week` | 逐账号选择，并通过一次最小请求启动尚未开始的周额度窗口 |
 | `codex-shift init-week --dry-run` | 显示符合条件的账号、模型和推理强度，不消耗额度 |
 | `codex-shift current` | 显示当前 profile |
-| `codex-shift remove <name>` | 删除一个非当前 profile |
+| `codex-shift remove <name> [--yes]` | 删除一个非当前 profile；`--yes` 可跳过确认 |
 | `codex-shift --help` | 显示命令帮助 |
 
 Profile 名称可以包含英文字母、数字、点、下划线和连字符。
@@ -98,6 +98,8 @@ Profile 名称可以包含英文字母、数字、点、下划线和连字符。
 账号列表可以显示邮箱、订阅类型、周额度剩余量、重置时间和数据来源。`LIVE` 表示本次实时刷新成功，`CACHED` 表示实时查询失败并正在显示缓存，`UNAVAILABLE` 表示实时和缓存数据都不可用。重置时间使用运行 Codex Shift 的本机时区。如果尚未使用的周额度窗口返回了一个随查询时间向后移动的重置时间，Codex Shift 会显示 `Not started`，而不是显示这个动态时间。
 
 在交互式终端中，`>` 表示当前选择，`*` 表示当前正在使用的 profile。使用方向键选择 profile，按 Enter 进入下一步，然后在确认界面选择 `Confirm switch` 或 `Cancel`；默认选中 `Confirm switch`。按 `R` 重新刷新，按 `Q` 或 Esc 退出。输出被重定向或通过管道传递时，`list` 会打印非交互表格并退出。
+
+如果所有实时刷新都失败，`list` 仍会显示缓存或不可用的数据行，但会返回退出状态 `1`，以便脚本识别本次没有获得实时数据。
 
 ### 启动尚未使用的周额度窗口
 
@@ -136,6 +138,8 @@ Codex Shift 会对每个 profile 连续执行两次不消耗额度的查询，�
 Windows 使用用户主目录下的对应路径。Codex Shift 不会主动打印认证 token；账号查询和登录创建的临时目录会在结束后删除。
 
 凭据变更使用原子文件替换、中断恢复标记和跨进程锁。Codex Shift 在自动把当前凭据同步回标记为当前的 profile 前，会验证两份凭据属于同一账号。如果用户在 Codex Shift 之外登录了其他账号，切换操作会停止，而不会覆盖已保存的 profile；此时可运行 `codex-shift save <name>` 显式保存当前登录。`codex-shift login` 也在隔离的临时 `CODEX_HOME` 中运行，因此登录失败或中断不会改动当前凭据文件。
+
+删除 profile 会永久移除其保存在本机的凭据和 metadata。交互式终端会要求确认，并默认取消；脚本或重定向输入必须传入 `--yes`。当前 profile 不能被删除。
 
 ## License
 

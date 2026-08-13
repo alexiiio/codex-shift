@@ -1,12 +1,22 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { promisify } from 'node:util';
 import { readAuthIdentity, assertSameAuthIdentity } from '../dist/auth.js';
 import { atomicWriteFile, withFileLock } from '../dist/storage.js';
 import { inferWeekStarted, isConfirmedUnstarted, mapWithConcurrency } from '../dist/accounts.js';
 import { selectMinimalModel } from '../dist/codex.js';
+
+const execFileAsync = promisify(execFile);
+
+test('CLI version matches the package version', async () => {
+  const packageJson = JSON.parse(await fs.readFile(path.resolve('package.json'), 'utf8'));
+  const { stdout } = await execFileAsync(process.execPath, [path.resolve('dist/cli.js'), '--version']);
+  assert.equal(stdout.trim(), packageJson.version);
+});
 
 function auth(accountId, refresh = 'token') {
   return JSON.stringify({ tokens: { account_id: accountId, refresh_token: refresh } });

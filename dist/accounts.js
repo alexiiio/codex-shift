@@ -22,6 +22,16 @@ async function exists(file) {
         return false;
     }
 }
+async function readFileIfExists(file) {
+    try {
+        return await fs.readFile(file);
+    }
+    catch (error) {
+        if (error.code === 'ENOENT')
+            return undefined;
+        throw error;
+    }
+}
 export async function ensureStorage() {
     await fs.mkdir(codexHome, { recursive: true, mode: 0o700 });
     await fs.mkdir(accountsDir, { recursive: true, mode: 0o700 });
@@ -57,44 +67,75 @@ async function withAccountsLock(action) {
     return await withFileLock(accountsLockPath, action);
 }
 async function commitCurrentProfileUnlocked(name, auth) {
-    await atomicWriteFile(pendingAuthPath, auth, 0o600);
+    if ((await exists(pendingProfilePath)) || (await exists(pendingAuthPath))) {
+        throw new Error('An earlier account transaction must be recovered before starting another one.');
+    }
     await atomicWriteFile(pendingProfilePath, `${name}\n`, 0o600);
+    await atomicWriteFile(pendingAuthPath, auth, 0o600);
     await atomicWriteFile(currentAuthPath, auth, 0o600);
     await atomicWriteFile(profileAuthPath(name), auth, 0o600);
     await atomicWriteFile(currentProfilePath, `${name}\n`, 0o600);
-    await Promise.all([
-        fs.rm(pendingProfilePath, { force: true }),
-        fs.rm(pendingAuthPath, { force: true }),
-    ]);
+    // Remove the intent first so an interrupted cleanup can only leave an orphaned staged credential.
+    await fs.rm(pendingProfilePath, { force: true });
+    await fs.rm(pendingAuthPath, { force: true });
 }
 async function recoverPendingCurrentUnlocked() {
-    if (!(await exists(pendingProfilePath))) {
-        await fs.rm(pendingAuthPath, { force: true });
-        return;
+    const [hasPendingProfile, hasPendingAuth] = await Promise.all([
+        exists(pendingProfilePath),
+        exists(pendingAuthPath),
+    ]);
+    if (!hasPendingProfile) {
+        if (!hasPendingAuth)
+            return;
+        // Versions before 0.2.2 staged auth before intent, so this may be the only copy of a new login.
+        const recoveredAuthPath = `${pendingAuthPath}.recovered-${Date.now()}`;
+        await fs.rename(pendingAuthPath, recoveredAuthPath);
+        throw new Error(`An interrupted credential without an account name was preserved at ${recoveredAuthPath}. `
+            + 'No account state was changed.');
     }
     const name = (await fs.readFile(pendingProfilePath, 'utf8')).trim();
     validateName(name);
+    if (!hasPendingAuth) {
+        const [activeAuth, targetAuth] = await Promise.all([
+            readFileIfExists(currentAuthPath),
+            readFileIfExists(profileAuthPath(name)),
+        ]);
+        const activeIdentity = activeAuth ? readAuthIdentity(activeAuth) : undefined;
+        const targetIdentity = targetAuth ? readAuthIdentity(targetAuth) : undefined;
+        if (activeIdentity && activeIdentity === targetIdentity) {
+            // The commit finished and only its cleanup marker survived.
+            await atomicWriteFile(currentProfilePath, `${name}\n`, 0o600);
+        }
+        // The process stopped before staging a new credential, or after the commit completed. Preserve all credentials.
+        await fs.rm(pendingProfilePath, { force: true });
+        return;
+    }
     const [activeAuth, stagedAuth] = await Promise.all([
-        fs.readFile(currentAuthPath),
+        readFileIfExists(currentAuthPath),
         fs.readFile(pendingAuthPath),
     ]);
-    const activeIdentity = readAuthIdentity(activeAuth);
+    const activeIdentity = activeAuth ? readAuthIdentity(activeAuth) : undefined;
     const stagedIdentity = readAuthIdentity(stagedAuth);
-    if (activeIdentity && activeIdentity === stagedIdentity) {
+    if (!stagedIdentity) {
+        throw new Error('An interrupted account switch contains unverifiable staged credentials. No credentials were overwritten.');
+    }
+    if (!activeAuth || activeIdentity === stagedIdentity) {
+        // Preserve the staged credential even if an external logout removed the active auth file.
         await atomicWriteFile(profileAuthPath(name), stagedAuth, 0o600);
-        await atomicWriteFile(currentProfilePath, `${name}\n`, 0o600);
+        if (activeIdentity === stagedIdentity)
+            await atomicWriteFile(currentProfilePath, `${name}\n`, 0o600);
     }
     else {
         const previous = await getCurrentProfile();
-        const previousAuth = previous ? await fs.readFile(profileAuthPath(previous)) : undefined;
-        if (!previousAuth || !activeIdentity || activeIdentity !== readAuthIdentity(previousAuth)) {
+        const previousAuth = previous ? await readFileIfExists(profileAuthPath(previous)) : undefined;
+        if (!previousAuth || activeIdentity !== readAuthIdentity(previousAuth)) {
             throw new Error('An interrupted account switch could not be recovered safely. No credentials were overwritten.');
         }
+        // The active account is still the previous profile. Save the staged target without switching it.
+        await atomicWriteFile(profileAuthPath(name), stagedAuth, 0o600);
     }
-    await Promise.all([
-        fs.rm(pendingProfilePath, { force: true }),
-        fs.rm(pendingAuthPath, { force: true }),
-    ]);
+    await fs.rm(pendingProfilePath, { force: true });
+    await fs.rm(pendingAuthPath, { force: true });
 }
 export async function recoverAccountState() {
     await withAccountsLock(recoverPendingCurrentUnlocked);
@@ -151,7 +192,9 @@ export async function removeProfile(name) {
         const current = await getCurrentProfile();
         if (current === name)
             throw new Error('Cannot remove the current profile. Switch to another profile first.');
-        await fs.rm(profileDir(name), { recursive: true, force: true });
+        if (!(await exists(profileAuthPath(name))))
+            throw new Error(`Profile '${name}' does not exist.`);
+        await fs.rm(profileDir(name), { recursive: true });
     });
 }
 async function writeMetaUnlocked(name, meta) {
@@ -319,6 +362,7 @@ export async function initializeWeeklyWindow(plan) {
     if (!(await exists(auth)))
         throw new Error(`Profile '${name}' does not exist.`);
     return await withAccountsLock(async () => {
+        await recoverPendingCurrentUnlocked();
         // Re-check inside the process lock so two init-week processes cannot consume the same account twice.
         const latestStatus = await probeAccountFromAuth(auth);
         if (latestStatus.weekStarted !== false) {
