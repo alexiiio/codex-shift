@@ -49,3 +49,5 @@ Codex Shift 使用独立的 `codex-shift` 命令作为稳定公共接口，不�
 3. 源码安装脚本作为需要检查或修改源码时的备用方式。
 
 Homebrew 官方仓库当前没有 Codex Shift formula。稳定发布并建立版本化归档后，可以选择维护独立 tap，或在符合要求时向 `homebrew-core` 提交 formula。
+
+GitHub 安装直接使用仓库中已构建的 `dist`，避免在 npm 的临时 Git 环境中依赖 TypeScript 编译器。修改源码后必须运行 `npm run build`，并将对应的 `dist` 更新一同提交。

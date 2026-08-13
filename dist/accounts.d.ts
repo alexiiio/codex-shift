@@ -1,0 +1,12 @@
+import type { AccountMeta, AccountProfile } from './types.js';
+export declare function validateName(name: string): void;
+export declare function ensureStorage(): Promise<void>;
+export declare function getCurrentProfile(): Promise<string | null>;
+export declare function saveCurrentAs(name: string): Promise<void>;
+export declare function loginProfile(name: string): Promise<void>;
+export declare function switchTo(name: string): Promise<void>;
+export declare function removeProfile(name: string): Promise<void>;
+export declare function writeMeta(name: string, meta: AccountMeta): Promise<void>;
+export declare function refreshProfileMeta(name: string): Promise<AccountMeta>;
+export declare function refreshAllProfiles(): Promise<AccountProfile[]>;
+export declare function listProfiles(): Promise<AccountProfile[]>;

@@ -22,8 +22,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
-    "prepare": "npm run build",
-    "prepublishOnly": "npm run check",
+    "prepublishOnly": "npm run check && npm run build",
     "start": "node dist/cli.js"
   },
   "engines": {
