@@ -31,13 +31,13 @@ Codex Shift 使用独立的 `codex-shift` 命令作为稳定公共接口，不�
 - Codex app-server 结构化账号和 rate-limit 查询
 - macOS、Windows、Linux CI
 - npm 公共包分发
+- GitHub Release 触发的 npm Trusted Publishing 与 provenance
 - 跨进程文件锁、原子凭据写入与账号身份一致性保护
 - 核心账号安全、模型选择和并发行为自动化测试
 
 首个稳定版本前计划完成：
 
 - 增加故障注入和真实终端交互测试
-- 完善自动化 npm 发布流程
 - 评估可选且无冲突的 `codex account ...` 兼容层
 
 ## 分发策略
@@ -51,10 +51,30 @@ Homebrew 官方仓库当前没有 Codex Shift formula。稳定发布并建立版
 
 GitHub tarball 安装直接使用仓库中已构建的 `dist`，避免在 npm 的临时 Git 环境中依赖 TypeScript 编译器。不要使用 `github:alexiiio/codex-shift` Git 依赖语法；npm 10 的全局安装可能留下指向已删除临时缓存的软链接。修改源码后必须运行 `npm run build`，并将对应的 `dist` 更新一同提交。
 
+## 发布流程
+
+`.github/workflows/publish.yml` 在正式 GitHub Release 发布后运行，预发布版本会被跳过。工作流通过 npm Trusted Publishing 的 OIDC 短期身份发布公共包；仓库不保存长期 npm publish token。发布 job 会检查 Release tag 与 `package.json` 版本一致，随后使用 lockfile 安装依赖、运行类型检查和测试、确认构建产物没有未提交差异、预览 tarball，最后执行 `npm publish`。Trusted Publishing 会自动生成 provenance。GitHub 的 `npm-production` Environment 只允许 `v*` 标签部署。
+
+npm package Settings 中的 Trusted Publisher 必须与以下值精确匹配：
+
+- Owner：`alexiiio`
+- Repository：`codex-shift`
+- Workflow filename：`publish.yml`
+- Environment：`npm-production`
+- Allowed actions：仅 `npm publish`
+
+发布新版本时：
+
+1. 更新 `package.json`、CLI 和 app-server clientInfo 的版本，并构建 `dist`。
+2. 运行 `npm ci`、`npm run check`、`npm test` 和 `npm pack --dry-run`。
+3. 提交并推送版本修改，创建对应的 `v<version>` tag。
+4. 在 GitHub 为该 tag 发布 Release；发布工作流会自动完成 npm 发布。
+5. 在 npm 页面确认 `latest`、版本和 provenance 来源提交正确。
+
 ## 本地开发与验证
 
 ```bash
-npm install
+npm ci
 npm run check
 npm test
 node dist/cli.js --help

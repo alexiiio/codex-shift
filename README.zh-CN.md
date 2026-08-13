@@ -4,6 +4,13 @@
   <a href="README.md">English</a> | <strong>简体中文</strong>
 </p>
 
+<p align="center">
+  <a href="https://www.npmjs.com/package/codex-shift"><img alt="npm 版本" src="https://img.shields.io/npm/v/codex-shift"></a>
+  <a href="https://github.com/alexiiio/codex-shift/actions/workflows/ci.yml"><img alt="CI 状态" src="https://github.com/alexiiio/codex-shift/actions/workflows/ci.yml/badge.svg"></a>
+  <img alt="Node.js 20 或更高版本" src="https://img.shields.io/node/v/codex-shift">
+  <a href="https://github.com/alexiiio/codex-shift/blob/main/LICENSE"><img alt="MIT 许可证" src="https://img.shields.io/npm/l/codex-shift"></a>
+</p>
+
 OpenAI Codex CLI 的跨平台账号切换与周额度窗口初始化工具。
 
 **切换账号，启动周额度窗口，不改变你的工作流。**
@@ -17,12 +24,16 @@ OpenAI Codex CLI 的跨平台账号切换与周额度窗口初始化工具。
 
 两个功能都会保留现有的 Codex Home，包括配置、MCP 服务、会话和历史记录。账号切换只替换当前使用的 `~/.codex/auth.json`；周额度初始化则在隔离的临时环境中运行。
 
+**本地优先设计：** 凭据不进行云同步 · Codex 配置、会话和历史记录保持不变 · 任何消耗额度的请求都需要用户确认。详见[存储与安全](#存储与安全)。
+
 ## 安装
 
 ### 环境要求
 
 - Node.js 20 或更高版本
 - 已安装 [OpenAI Codex CLI](https://developers.openai.com/codex/cli)，并可通过 `codex` 命令调用
+
+已通过 CI 在 macOS、Windows 和 Linux，以及 Node.js 20、22 环境中验证。
 
 通过 npm 安装最新版本：
 
@@ -36,44 +47,26 @@ npm install --global codex-shift
 codex-shift --help
 ```
 
-## 快速开始
+## 保存第一个 profile
 
-下面的 `personal` 和 `work` 只是 profile 名称示例，不是固定指令或保留名称。请将它们替换为你自定义的名称。
-
-保存 Codex 当前正在使用的账号：
+在已经安装并登录 Codex CLI 的前提下，安装 Codex Shift 并保存当前账号。`personal` 只是 profile 名称示例，请替换成你需要的名称。
 
 ```bash
 codex-shift save personal
+codex-shift current
 ```
 
-登录另一个账号，并将它保存为 profile：
-
-```bash
-codex-shift login work
-```
-
-查看账号信息，并通过交互列表切换 profile：
+运行 `codex-shift login work` 可以添加另一个账号，然后通过交互列表查看并切换 profile：
 
 ```bash
 codex-shift list
 ```
 
-列表会刷新每个 profile 的账号、订阅类型、周额度和重置时间，并用 `LIVE`、`CACHED`、`UNAVAILABLE` 标识数据来源。使用方向键选择账号，按 Enter 后确认切换；`*` 标识 Codex 当前正在使用的账号。
+![使用脱敏数据展示的 Codex Shift 账号列表](https://raw.githubusercontent.com/alexiiio/codex-shift/main/docs/images/list-demo.svg)
 
-启动尚未开始计算的周额度窗口：
+_图片仅为功能示意，使用脱敏数据；凭据和 token 不会显示在列表中。_
 
-```bash
-codex-shift init-week
-```
-
-Codex Shift 会检测符合条件的账号，并在为每个账号发送一次最小请求前要求确认。选择取消不会消耗额度。该请求刻意设计得远小于普通编程任务：只要求回复 `OK`，不携带项目上下文和历史会话，并选择成本最低的可用模型及推理强度。具体说明请参阅[启动尚未使用的周额度窗口](#启动尚未使用的周额度窗口)。
-
-你也可以通过 profile 名称直接切换，然后继续正常使用 Codex：
-
-```bash
-codex-shift use personal
-codex
-```
+运行 `codex-shift init-week --dry-run` 可以预览尚未启动周额度窗口的账号，并且不会消耗额度。
 
 ## 命令
 

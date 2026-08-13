@@ -4,6 +4,13 @@
   <strong>English</strong> | <a href="README.zh-CN.md">简体中文</a>
 </p>
 
+<p align="center">
+  <a href="https://www.npmjs.com/package/codex-shift"><img alt="npm version" src="https://img.shields.io/npm/v/codex-shift"></a>
+  <a href="https://github.com/alexiiio/codex-shift/actions/workflows/ci.yml"><img alt="CI status" src="https://github.com/alexiiio/codex-shift/actions/workflows/ci.yml/badge.svg"></a>
+  <img alt="Node.js 20 or later" src="https://img.shields.io/node/v/codex-shift">
+  <a href="https://github.com/alexiiio/codex-shift/blob/main/LICENSE"><img alt="MIT license" src="https://img.shields.io/npm/l/codex-shift"></a>
+</p>
+
 Cross-platform account switching and weekly usage-window initialization for OpenAI Codex CLI.
 
 **Switch accounts. Start weekly windows. Keep your workflow.**
@@ -17,12 +24,16 @@ Core features include:
 
 Both workflows keep your existing Codex home intact — including configuration, MCP servers, sessions, and history. Account switching only replaces the active `~/.codex/auth.json`; weekly initialization runs in an isolated temporary environment.
 
+**Local by design:** no credential cloud sync · Codex configuration, sessions, and history stay intact · quota-using requests always require confirmation. [Read the security details](#storage-and-security).
+
 ## Installation
 
 ### Requirements
 
 - Node.js 20 or later
 - [OpenAI Codex CLI](https://developers.openai.com/codex/cli) installed and available as `codex`
+
+Validated in CI on macOS, Windows, and Linux with Node.js 20 and 22.
 
 Install the latest version from npm:
 
@@ -36,44 +47,26 @@ After installation, verify that the command is available:
 codex-shift --help
 ```
 
-## Quick start
+## Save your first profile
 
-`personal` and `work` below are example profile names, not fixed commands or reserved names. Replace them with names that make sense to you.
-
-Save the account Codex is currently using:
+After Codex CLI is installed and logged in, install Codex Shift and save that account. `personal` is an example profile name—replace it with any name that makes sense to you.
 
 ```bash
 codex-shift save personal
+codex-shift current
 ```
 
-Log in to another account and save it as a profile:
-
-```bash
-codex-shift login work
-```
-
-View account information and switch profiles interactively:
+Add another account with `codex-shift login work`, then review and switch profiles interactively:
 
 ```bash
 codex-shift list
 ```
 
-The list refreshes each profile's account, plan, weekly usage, and reset time. `LIVE`, `CACHED`, and `UNAVAILABLE` identify the source of each row. Use the arrow keys to choose an account, press Enter, and confirm the switch. The `*` marker identifies the account Codex is currently using.
+![Illustrative Codex Shift account list with anonymized data](https://raw.githubusercontent.com/alexiiio/codex-shift/main/docs/images/list-demo.svg)
 
-Start weekly usage windows that have not begun yet:
+_Illustrative data only. Credentials and tokens are never displayed._
 
-```bash
-codex-shift init-week
-```
-
-Codex Shift detects eligible accounts and asks for confirmation before sending one minimal request per account. No quota is consumed if you cancel. The request is deliberately kept much smaller than a normal coding task: it asks only for `OK`, uses no project context or persistent history, and selects the lowest-cost available model and reasoning effort. See [Start unused weekly windows](#start-unused-weekly-windows) for details.
-
-You can also switch directly by profile name, then continue using Codex normally:
-
-```bash
-codex-shift use personal
-codex
-```
+Preview accounts with unstarted weekly windows—without using quota—with `codex-shift init-week --dry-run`.
 
 ## Commands
 
