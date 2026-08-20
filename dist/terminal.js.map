@@ -1,0 +1,1 @@
+{"version":3,"file":"terminal.js","sourceRoot":"","sources":["../src/terminal.ts"],"names":[],"mappings":"AAAA;;;GAGG;AACH,MAAM,UAAU,mBAAmB,CAAC,aAAqB,EAAE,KAAe;IACxE,MAAM,IAAI,GAAG,KAAK,CAAC,IAAI,CAAC,IAAI,CAAC,CAAC,OAAO,CAAC,QAAQ,EAAE,MAAM,CAAC,CAAC;IACxD,OAAO,GAAG,aAAa,GAAG,IAAI,MAAM,CAAC;AACvC,CAAC"}

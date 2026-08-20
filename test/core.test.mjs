@@ -9,6 +9,7 @@ import { readAuthIdentity, assertSameAuthIdentity } from '../dist/auth.js';
 import { atomicWriteFile, withFileLock } from '../dist/storage.js';
 import { inferWeekStarted, isConfirmedUnstarted, mapWithConcurrency } from '../dist/accounts.js';
 import { selectMinimalModel } from '../dist/codex.js';
+import { formatTerminalFrame } from '../dist/terminal.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -16,6 +17,12 @@ test('CLI version matches the package version', async () => {
   const packageJson = JSON.parse(await fs.readFile(path.resolve('package.json'), 'utf8'));
   const { stdout } = await execFileAsync(process.execPath, [path.resolve('dist/cli.js'), '--version']);
   assert.equal(stdout.trim(), packageJson.version);
+});
+
+test('interactive terminal frames use rows instead of array separators', () => {
+  const frame = formatTerminalFrame('<clear>', ['Codex Shift', 'Select weekly windows', '', 'NAME\nprofile']);
+  assert.equal(frame, '<clear>Codex Shift\r\nSelect weekly windows\r\n\r\nNAME\r\nprofile\r\n');
+  assert.equal(frame.includes('Shift,Select'), false);
 });
 
 function auth(accountId, refresh = 'token') {

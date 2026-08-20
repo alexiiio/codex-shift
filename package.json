@@ -1,6 +1,6 @@
 {
   "name": "codex-shift",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Switch OpenAI Codex CLI accounts and start weekly usage windows with minimal quota.",
   "homepage": "https://github.com/alexiiio/codex-shift#readme",
   "repository": {

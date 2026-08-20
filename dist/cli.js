@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import readline from 'node:readline';
 import { getCurrentProfile, initializeWeeklyWindow, inspectWeeklyWindows, loginProfile, mapWithConcurrency, planWeeklyInitialization, refreshAllProfiles, recoverAccountState, removeProfile, saveCurrentAs, switchTo, } from './accounts.js';
-const VERSION = '0.2.2';
+import { formatTerminalFrame } from './terminal.js';
+const VERSION = '0.2.3';
 const ANSI = {
     altScreenOn: '\u001b[?1049h',
     altScreenOff: '\u001b[?1049l',
@@ -213,7 +214,7 @@ async function selectWeeklyInitializations(plans) {
             const confirm = confirmIndex === 1 ? paint(true, `${ANSI.bold}${ANSI.cyan}`, '› Confirm and use quota') : '  Confirm and use quota';
             body.push('', 'One minimal Codex request will be sent for each selected account.', paint(true, ANSI.dim, 'This consumes quota. Each account is re-checked before execution.'), '', cancel, confirm, '', formatHelp([['↑/↓', 'Move'], ['Enter', 'Select'], ['Esc', 'Back']]));
         }
-        stdout.write(`${ANSI.clear}${body}\n`);
+        stdout.write(formatTerminalFrame(ANSI.clear, body));
     };
     return await new Promise((resolve) => {
         const cleanup = () => {
@@ -388,7 +389,7 @@ async function showInteractiveList(initialProfiles) {
                 : formatHelp([['↑/↓', 'Move'], ['Enter', 'Select'], ['R', 'Refresh'], ['Q', 'Quit']]);
             body += `\n\n${help}`;
         }
-        stdout.write(`${ANSI.clear}${body}\n`);
+        stdout.write(formatTerminalFrame(ANSI.clear, [body]));
     };
     return await new Promise((resolve, reject) => {
         const cleanup = () => {

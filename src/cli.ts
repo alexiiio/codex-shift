@@ -13,9 +13,10 @@ import {
   saveCurrentAs,
   switchTo,
 } from './accounts.js';
+import { formatTerminalFrame } from './terminal.js';
 import type { AccountProfile, WeeklyInitPlan } from './types.js';
 
-const VERSION = '0.2.2';
+const VERSION = '0.2.3';
 
 const ANSI = {
   altScreenOn: '\u001b[?1049h',
@@ -274,7 +275,7 @@ async function selectWeeklyInitializations(plans: WeeklyInitPlan[]): Promise<Wee
         formatHelp([['↑/↓', 'Move'], ['Enter', 'Select'], ['Esc', 'Back']]),
       );
     }
-    stdout.write(`${ANSI.clear}${body}\n`);
+    stdout.write(formatTerminalFrame(ANSI.clear, body));
   };
 
   return await new Promise<WeeklyInitPlan[] | null>((resolve) => {
@@ -457,7 +458,7 @@ async function showInteractiveList(initialProfiles: AccountProfile[]): Promise<A
       body += `\n\n${help}`;
     }
 
-    stdout.write(`${ANSI.clear}${body}\n`);
+    stdout.write(formatTerminalFrame(ANSI.clear, [body]));
   };
 
   return await new Promise<AccountProfile[]>((resolve, reject) => {

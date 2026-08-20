@@ -177,7 +177,7 @@ async function withAppServer(tempHome, action) {
     };
     try {
         await request('initialize', {
-            clientInfo: { name: 'codex-shift', title: 'Codex Shift', version: '0.2.2' },
+            clientInfo: { name: 'codex-shift', title: 'Codex Shift', version: '0.2.3' },
         });
         child.stdin.write(`${JSON.stringify({ method: 'initialized' })}\n`);
         return await action(request);
