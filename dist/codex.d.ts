@@ -9,6 +9,7 @@ interface ModelListEntry {
         reasoningEffort?: string;
     }>;
 }
+export declare function readResetCreditStatus(limitsResult: Record<string, unknown>): Pick<AccountStatus, 'resetCreditsAvailable' | 'resetCreditsNextExpiry' | 'resetCreditsExpiryState'>;
 export declare function ensureCodexInstalled(): void;
 export declare function loginWithCodex(): Promise<Buffer>;
 export declare function selectMinimalModel(models: ModelListEntry[]): Omit<WeeklyInitPlan, 'name' | 'account'>;

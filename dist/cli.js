@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import readline from 'node:readline';
 import { getCurrentProfile, initializeWeeklyWindow, inspectWeeklyWindows, loginProfile, mapWithConcurrency, planWeeklyInitialization, refreshAllProfiles, recoverAccountState, removeProfile, saveCurrentAs, switchTo, } from './accounts.js';
-import { formatTerminalFrame } from './terminal.js';
-const VERSION = '0.2.3';
+import { formatTerminalFrame, isExpiringSoon, } from './terminal.js';
+const VERSION = '0.2.4';
 const ANSI = {
     altScreenOn: '\u001b[?1049h',
     altScreenOff: '\u001b[?1049l',
@@ -85,6 +85,48 @@ function formatReset(profile) {
         minute: '2-digit',
     }).format(new Date(timestamp * 1000));
 }
+function formatLocalTime(timestamp) {
+    return new Intl.DateTimeFormat(undefined, {
+        month: 'short',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+    }).format(new Date(timestamp * 1000));
+}
+function formatSelectedResetCredits(profile) {
+    const count = profile.meta?.resetCreditsAvailable;
+    const selected = `${paint(true, ANSI.dim, 'Selected account:')} ${paint(true, `${ANSI.bold}${ANSI.cyan}`, profile.name)}`;
+    if (count === undefined)
+        return `${selected}\n${paint(true, ANSI.dim, 'Reset credits:')} unavailable`;
+    if (count === 0)
+        return `${selected}\n${paint(true, ANSI.dim, 'Reset credits:')} none available`;
+    const amount = `${count} available`;
+    const expiry = profile.meta?.resetCreditsNextExpiry;
+    let expiryLabel;
+    let expiryValue;
+    switch (profile.meta?.resetCreditsExpiryState) {
+        case 'known':
+            expiryLabel = expiry === undefined ? 'Expiry details:' : 'Next expiry:';
+            expiryValue = expiry === undefined ? 'unavailable' : formatLocalTime(expiry);
+            break;
+        case 'partial':
+            expiryLabel = expiry === undefined ? 'Expiry details:' : 'Nearest known expiry:';
+            expiryValue = expiry === undefined ? 'incomplete' : formatLocalTime(expiry);
+            break;
+        case 'no-expiry':
+            expiryLabel = 'Expiry:';
+            expiryValue = 'No expiry';
+            break;
+        default:
+            expiryLabel = 'Expiry details:';
+            expiryValue = 'unavailable';
+    }
+    const warning = expiry !== undefined && isExpiringSoon(expiry);
+    const resetDetails = warning
+        ? paint(true, ANSI.yellow, `Reset credits: ${amount} · ${expiryLabel} ${expiryValue}`)
+        : `${paint(true, ANSI.dim, 'Reset credits:')} ${amount} · ${paint(true, ANSI.dim, expiryLabel)} ${expiryValue}`;
+    return `${selected}\n${resetDetails}`;
+}
 function createRows(profiles) {
     return profiles.map((profile) => ({
         name: profile.name,
@@ -92,6 +134,7 @@ function createRows(profiles) {
         plan: formatPlan(profile.meta?.plan),
         weekLeft: profile.meta?.weekLeft === undefined ? '-' : `${profile.meta.weekLeft}%`,
         reset: formatReset(profile),
+        resets: profile.meta?.resetCreditsAvailable === undefined ? '-' : String(profile.meta.resetCreditsAvailable),
         source: profile.dataSource === 'live'
             ? 'LIVE'
             : profile.dataSource === 'cached'
@@ -114,6 +157,7 @@ function formatProfileTable(profiles, selectedIndex, color = false) {
     const planWidth = Math.max('PLAN'.length, ...rows.map((row) => row.plan.length));
     const weekLeftWidth = Math.max('WEEK LEFT'.length, ...rows.map((row) => row.weekLeft.length));
     const resetWidth = Math.max('RESET TIME'.length, ...rows.map((row) => row.reset.length));
+    const resetsWidth = Math.max('RESETS'.length, ...rows.map((row) => row.resets.length));
     const sourceWidth = Math.max('SOURCE'.length, ...rows.map((row) => row.source.length));
     const header = [
         'NAME'.padEnd(nameWidth),
@@ -121,6 +165,7 @@ function formatProfileTable(profiles, selectedIndex, color = false) {
         'PLAN'.padEnd(planWidth),
         'WEEK LEFT'.padEnd(weekLeftWidth),
         'RESET TIME'.padEnd(resetWidth),
+        'RESETS'.padEnd(resetsWidth),
         'SOURCE'.padEnd(sourceWidth),
     ].join('  ');
     const lines = [`    ${paint(color, ANSI.dim, header)}`];
@@ -132,6 +177,7 @@ function formatProfileTable(profiles, selectedIndex, color = false) {
             row.plan.padEnd(planWidth),
             row.weekLeft.padEnd(weekLeftWidth),
             row.reset.padEnd(resetWidth),
+            row.resets.padEnd(resetsWidth),
             profileSource(profiles[index], row.source.padEnd(sourceWidth), color),
         ].join('  ');
         const cursor = selected ? paint(color, `${ANSI.bold}${ANSI.cyan}`, '›') : ' ';
@@ -382,6 +428,8 @@ async function showInteractiveList(initialProfiles) {
         }
         else {
             body += `\n${paint(true, ANSI.dim, `${profiles.length} profiles · Choose an account`)}\n\n${formatProfileTable(profiles, selectedIndex, true)}`;
+            if (selected)
+                body += `\n\n${formatSelectedResetCredits(selected)}`;
             if (notice)
                 body += `\n\n${paint(true, ANSI.green, notice)}`;
             const help = busy

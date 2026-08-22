@@ -6,6 +6,9 @@ export interface AccountMeta {
   weekWindowDurationMins?: number;
   weekReset?: number;
   weekStarted?: boolean;
+  resetCreditsAvailable?: number;
+  resetCreditsNextExpiry?: number;
+  resetCreditsExpiryState?: ResetCreditsExpiryState;
   updatedAt?: string;
 }
 
@@ -24,7 +27,12 @@ export interface AccountStatus {
   weekWindowDurationMins?: number;
   weekReset?: number;
   weekStarted?: boolean;
+  resetCreditsAvailable?: number;
+  resetCreditsNextExpiry?: number;
+  resetCreditsExpiryState?: ResetCreditsExpiryState;
 }
+
+export type ResetCreditsExpiryState = 'known' | 'no-expiry' | 'partial' | 'unavailable';
 
 export interface WeeklyInitPlan {
   name: string;

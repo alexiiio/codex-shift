@@ -8,8 +8,11 @@ import { promisify } from 'node:util';
 import { readAuthIdentity, assertSameAuthIdentity } from '../dist/auth.js';
 import { atomicWriteFile, withFileLock } from '../dist/storage.js';
 import { inferWeekStarted, isConfirmedUnstarted, mapWithConcurrency } from '../dist/accounts.js';
-import { selectMinimalModel } from '../dist/codex.js';
-import { formatTerminalFrame } from '../dist/terminal.js';
+import { readResetCreditStatus, selectMinimalModel } from '../dist/codex.js';
+import {
+  formatTerminalFrame,
+  isExpiringSoon,
+} from '../dist/terminal.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -23,6 +26,48 @@ test('interactive terminal frames use rows instead of array separators', () => {
   const frame = formatTerminalFrame('<clear>', ['Codex Shift', 'Select weekly windows', '', 'NAME\nprofile']);
   assert.equal(frame, '<clear>Codex Shift\r\nSelect weekly windows\r\n\r\nNAME\r\nprofile\r\n');
   assert.equal(frame.includes('Shift,Select'), false);
+});
+
+test('reset-credit expiry warning includes the 48-hour boundary', () => {
+  const now = 1_000_000;
+  assert.equal(isExpiringSoon(now + (48 * 60 * 60), now), true);
+  assert.equal(isExpiringSoon(now + (48 * 60 * 60) + 1, now), false);
+  assert.equal(isExpiringSoon(now - 1, now), false);
+});
+
+test('usage-limit reset credits preserve count and expiry detail boundaries', () => {
+  assert.deepEqual(readResetCreditStatus({ rateLimitResetCredits: { availableCount: 0, credits: [] } }), {
+    resetCreditsAvailable: 0,
+  });
+  assert.deepEqual(readResetCreditStatus({ rateLimitResetCredits: { availableCount: 2, credits: null } }), {
+    resetCreditsAvailable: 2,
+    resetCreditsExpiryState: 'unavailable',
+  });
+  assert.deepEqual(readResetCreditStatus({
+    rateLimitResetCredits: {
+      availableCount: 2,
+      credits: [{ expiresAt: 200 }, { expiresAt: 100 }],
+    },
+  }), {
+    resetCreditsAvailable: 2,
+    resetCreditsNextExpiry: 100,
+    resetCreditsExpiryState: 'known',
+  });
+  assert.deepEqual(readResetCreditStatus({
+    rateLimitResetCredits: { availableCount: 2, credits: [{ expiresAt: 200 }] },
+  }), {
+    resetCreditsAvailable: 2,
+    resetCreditsNextExpiry: 200,
+    resetCreditsExpiryState: 'partial',
+  });
+  assert.deepEqual(readResetCreditStatus({
+    rateLimitResetCredits: { availableCount: 1, credits: [{ expiresAt: null }] },
+  }), {
+    resetCreditsAvailable: 1,
+    resetCreditsExpiryState: 'no-expiry',
+  });
+  assert.deepEqual(readResetCreditStatus({}), {});
+  assert.deepEqual(readResetCreditStatus({ rateLimitResetCredits: { availableCount: -1 } }), {});
 });
 
 function auth(accountId, refresh = 'token') {

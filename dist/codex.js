@@ -29,6 +29,39 @@ const REASONING_EFFORT_ORDER = [
     'xhigh',
     'max',
 ];
+export function readResetCreditStatus(limitsResult) {
+    const summary = limitsResult.rateLimitResetCredits;
+    if (typeof summary !== 'object' || summary === null)
+        return {};
+    const count = summary.availableCount;
+    if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 0)
+        return {};
+    const result = { resetCreditsAvailable: count };
+    if (count === 0)
+        return result;
+    const credits = summary.credits;
+    if (!Array.isArray(credits)) {
+        return { ...result, resetCreditsExpiryState: 'unavailable' };
+    }
+    const details = credits.slice(0, count).filter((credit) => typeof credit === 'object' && credit !== null);
+    const complete = credits.length >= count && details.length >= count;
+    const expiryValues = details.map((credit) => credit.expiresAt);
+    const expiries = expiryValues.filter((expiresAt) => typeof expiresAt === 'number' && Number.isSafeInteger(expiresAt));
+    // The backend may cap detail rows below availableCount, so never present a partial minimum as definitive.
+    const allExpiryValuesExplicit = complete
+        && expiryValues.every((expiresAt) => expiresAt === null || (typeof expiresAt === 'number' && Number.isSafeInteger(expiresAt)));
+    if (expiries.length > 0) {
+        return {
+            ...result,
+            resetCreditsNextExpiry: Math.min(...expiries),
+            resetCreditsExpiryState: allExpiryValuesExplicit ? 'known' : 'partial',
+        };
+    }
+    if (allExpiryValuesExplicit && expiryValues.every((expiresAt) => expiresAt === null)) {
+        return { ...result, resetCreditsExpiryState: 'no-expiry' };
+    }
+    return { ...result, resetCreditsExpiryState: credits.length > 0 ? 'partial' : 'unavailable' };
+}
 export function ensureCodexInstalled() {
     const command = process.platform === 'win32' ? 'where' : 'which';
     const result = spawnSync(command, ['codex'], { stdio: 'ignore' });
@@ -80,6 +113,7 @@ function readWeeklyStatus(account, limitsMessage) {
         weekWindowDurationMins: weekly?.windowDurationMins,
         weekReset: typeof weekly?.resetsAt === 'number' ? weekly.resetsAt : undefined,
         weekStarted: typeof used === 'number' && used > 0 ? true : undefined,
+        ...readResetCreditStatus(limitsResult),
         observedAt: Date.now() / 1000,
     };
 }

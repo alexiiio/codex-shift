@@ -6,4 +6,8 @@ export function formatTerminalFrame(clearSequence, lines) {
     const body = lines.join('\n').replace(/\r?\n/g, '\r\n');
     return `${clearSequence}${body}\r\n`;
 }
+export function isExpiringSoon(timestamp, nowSeconds = Date.now() / 1000) {
+    const remainingSeconds = timestamp - nowSeconds;
+    return remainingSeconds >= 0 && remainingSeconds <= 48 * 60 * 60;
+}
 //# sourceMappingURL=terminal.js.map
